@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /seller-dashboard
+Disallow: /creator-dashboard
+Disallow: /checkout
+Disallow: /order-success
+Disallow: /my-orders
+Disallow: /messages
+Disallow: /rewards
+Disallow: /kyc
+Disallow: /notifications
+Disallow: /returns
+Disallow: /invoices
+Disallow: /supplier-leads
+
+Sitemap: https://byndio.in/sitemap.xml

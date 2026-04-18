@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BYNDIO — India's 0% Commission Marketplace</title>
+    <meta name="description" content="Shop from 10 lakh+ products across fashion, electronics, beauty & more. 0% commission for sellers. 20,000+ creator partners. India's fairest marketplace." />
+    <meta name="keywords" content="online shopping india, zero commission marketplace, byndio, buy sell online, creator commerce india" />
+    <meta property="og:title" content="BYNDIO — India's 0% Commission Marketplace" />
+    <meta property="og:description" content="Shop smarter. Sell fairer. 50K+ sellers, 10L+ products. Zero commission. Fast delivery across India." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="BYNDIO — India's 0% Commission Marketplace" />
+    <meta property="og:image" content="https://byndio.in/og-image.png" />
+    <meta property="og:url" content="https://byndio.in" />
+    <meta name="twitter:image" content="https://byndio.in/og-image.png" />
+    <meta name="twitter:description" content="Shop smarter. Sell fairer. 50K+ sellers, 10L+ products. Zero commission." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    
+    <!-- Perceived Performance Optimizations (Lowers Latency) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://checkout.razorpay.com" />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
+    <link rel="dns-prefetch" href="https://api.razorpay.com" />
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
+    
+    <!-- Security Headers - X-Frame-Options & frame-ancestors must be set via HTTP headers on server -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0D47A1" />
+    
+    <!-- Content Security Policy - Strict but functional -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com https://cdnjs.cloudflare.com https://challenges.cloudflare.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: https:;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://cdn.razorpay.com https://api.resend.com https://www.google-analytics.com https://www.googletagmanager.com https://challenges.cloudflare.com;
+      frame-src https://checkout.razorpay.com https://api.razorpay.com https://challenges.cloudflare.com;
+      base-uri 'self';
+      form-action 'self' https://*.supabase.co;
+    " />
+
+    <!-- Google Analytics 4 — REPLACE GA_MEASUREMENT_ID in Netlify env vars -->
+    <!-- Set VITE_GA_ID=G-XXXXXXXXXX in Netlify → Site Settings → Environment Variables -->
+    <script>
+      (function() {
+        var gaId = '__GA_ID__'; // Replaced at build time via vite.config.ts
+        if (!gaId || gaId === '__GA_ID__' || gaId.includes('XXXX')) return;
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + gaId;
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){window.dataLayer.push(arguments);}
+        window._gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', gaId);
+      })();
+    </script>
+
+    <!-- Microsoft Clarity — REPLACE CLARITY_ID in Netlify env vars -->
+    <!-- Set VITE_CLARITY_ID=XXXXXXXXXX in Netlify → Site Settings → Environment Variables -->
+    <script>
+      (function() {
+        var clarityId = '__CLARITY_ID__'; // Replaced at build time via vite.config.ts
+        if (!clarityId || clarityId === '__CLARITY_ID__' || clarityId.includes('XXXX')) return;
+        (function(c,l,a,r,i,t,y){
+          c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+          t=l.createElement(r);t.async=1;t.src='https://www.clarity.ms/tag/'+i;
+          y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+        })(window,document,'clarity','script',clarityId);
+      })();
+    </script>
+
+    <!-- Cloudflare Turnstile CAPTCHA for login/register security -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <!-- Razorpay SDK for payment integration — defer prevents render-blocking -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
+    <!-- jsPDF for client-side invoice generation (used by src/lib/pdfInvoice.ts via window.jspdf) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+
+    <!-- Structured Data for Rich Search Results -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "BYNDIO",
+      "url": "https://byndio.in",
+      "description": "India's 0% commission marketplace - shop from 50K+ sellers and 10L+ products",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://byndio.in/products?search={search_term_string}",
+        "query-input": "required name=search_term_string"
+      },
+      "sameAs": [
+        "https://www.instagram.com/byndio",
+        "https://twitter.com/byndio"
+      ],
+      "publisher": {
+        "@type": "Organization",
+        "name": "BYNDIO Technologies Pvt Ltd",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://byndio.in/icon-512.png"
+        }
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      <div style="text-align:center;padding:2rem;font-family:system-ui">
+        <h2>JavaScript Required</h2>
+        <p>BYNDIO requires JavaScript to be enabled. Please enable it in your browser settings.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
