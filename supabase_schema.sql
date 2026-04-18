@@ -937,16 +937,17 @@ END; $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS "order_cancel_stock_restore" ON public.orders;
 CREATE TRIGGER order_cancel_stock_restore AFTER UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION restore_stock_on_cancel();
 
-CREATE OR REPLACE FUNCTION check_stock_before_order()
+CREATE OR REPLACE FUNCTION public.check_stock_before_order()
 RETURNS TRIGGER AS $$
-DECLARE available INT;
+DECLARE 
+  v_available INT;
 BEGIN
-  SELECT stock_quantity INTO available FROM public.products WHERE id = NEW.product_id;
-  IF available IS NOT NULL AND available < NEW.quantity THEN
+  SELECT stock_quantity INTO v_available FROM public.products WHERE id = NEW.product_id;
+  IF v_available IS NOT NULL AND v_available < NEW.quantity THEN
     RAISE EXCEPTION 'Insufficient stock for product %', NEW.product_id;
   END IF;
   RETURN NEW;
-END; $$ LANGUAGE plpgsql;
+END; $$ LANGUAGE plpgsql SECURITY DEFINER;
 DROP TRIGGER IF EXISTS "order_item_stock_check" ON public.order_items;
 CREATE TRIGGER order_item_stock_check BEFORE INSERT ON public.order_items FOR EACH ROW EXECUTE FUNCTION check_stock_before_order();
 
