@@ -97,7 +97,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     setLoading(true); setError(null);
     try {
       // C-09: Server-side rate limiting via Netlify function
-      /*
       const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,7 +106,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
       if (!rlRes.ok || !rlData.allowed) {
         throw new Error(rlData.message || `Too many OTP requests. Try again in 1 minute.`);
       }
-      */
 
       // Supabase phone OTP — requires phone auth enabled in Supabase dashboard
       const { error } = await supabase.auth.signInWithOtp({ phone: `${countryCode}${phone.replace(/\D/g, '')}` });
@@ -280,7 +278,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
         } else { setSuccess('Please check your email to confirm your account.'); }
       } else {
         // C-07: Server-side rate limiting via Netlify function
-        /*
         const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -290,7 +287,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
         if (!rlRes.ok || !rlData.allowed) {
           throw new Error(rlData.message || `Account locked due to too many failed attempts. Try again in 1 minute.`);
         }
-        */
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
