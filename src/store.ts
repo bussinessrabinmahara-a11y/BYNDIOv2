@@ -474,8 +474,7 @@ export const useAppStore = create<AppState>()(
                body: JSON.stringify({
                  cartItems: cart.map(i => ({ product_id: i.id, quantity: i.qty })),
                  receipt: `rcpt_${user.id.slice(0,8)}_${Date.now()}`,
-                 platformFee: platformFee,
-                 shippingFee: shippingFee,
+                 shippingMethodId: get().shippingMethodId,
                  couponCode: couponCode,
                  userId: user.id,
                  notes: {
