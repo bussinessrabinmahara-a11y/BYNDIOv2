@@ -254,9 +254,11 @@ export default function Profile() {
               </div>
             </div>
             <div className="flex gap-4">
-              <Link to="/admin" className="flex items-center gap-2.5 px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all backdrop-blur-sm">
-                <LayoutDashboard size={20} /> Control Panel
-              </Link>
+              {activeUser.role === 'admin' && (
+                <Link to="/admin" className="flex items-center gap-2.5 px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all backdrop-blur-sm">
+                  <LayoutDashboard size={20} /> Control Panel
+                </Link>
+              )}
               <button onClick={() => logout()} className="flex items-center gap-2.5 px-8 py-3 bg-red-500 hover:bg-red-600 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all shadow-xl shadow-red-900/20">
                 <LogOut size={20} /> Log Out
               </button>
