@@ -1,3 +1,4 @@
+// BYNDIO Rate Limiter - v1.2
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
