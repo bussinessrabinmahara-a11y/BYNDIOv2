@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { MapPin, Navigation, Search, X, Loader2, MapPinned, CheckCircle2 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -257,7 +258,7 @@ export default function LocationPicker({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -547,6 +548,7 @@ export default function LocationPicker({
           overflow: hidden;
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
