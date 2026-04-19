@@ -295,13 +295,13 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
             {/* Location Picker Button */}
             <button 
               onClick={() => setShowLocationPicker(true)}
-              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-white/10 rounded-lg transition-all text-left group"
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-white/10 rounded-lg transition-all text-left group shrink-0"
               aria-label="Set delivery location"
             >
               <MapPin className="w-4 h-4 text-white/80 shrink-0 group-hover:text-white transition-colors" />
-              <div className="flex flex-col leading-none">
+              <div className="flex flex-col leading-none max-w-[100px]">
                 <span className="text-[9px] font-semibold uppercase tracking-wider text-white/60">Deliver to</span>
-                <span className="text-[12px] font-bold text-white mt-0.5">
+                <span className="text-[12px] font-bold text-white mt-0.5 truncate">
                   {displayLocation || <span className="text-white/80">Set location</span>}
                 </span>
               </div>
@@ -360,7 +360,7 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="lg:hidden fixed top-[72px] left-0 w-full h-[calc(100vh-72px)] bg-white text-gray-900 overflow-y-auto pb-20 shadow-[-10px_10px_30px_rgba(0,0,0,0.1)] z-40 border-t border-gray-100 px-4 pt-4"
+              className="lg:hidden fixed top-[49px] md:top-[65px] left-0 w-full h-[calc(100vh-49px)] md:h-[calc(100vh-65px)] bg-white text-gray-900 overflow-y-auto pb-20 shadow-[-10px_10px_30px_rgba(0,0,0,0.1)] z-40 border-t border-gray-100 px-4 pt-4"
             >
               {/* Mobile Location Picker - Light Theme */}
               <button 
