@@ -15,7 +15,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing identifier or action' }) };
     }
     const maxAttempts = action === 'otp_send' ? 5 : 10;
-    const lockMinutes = 10;
+    const lockMinutes = 1;
     const { data: existing } = await supabase
       .from('rate_limits')
       .select('*')

@@ -104,7 +104,7 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
       });
       const rlData = await rlRes.json().catch(() => ({}));
       if (!rlRes.ok || !rlData.allowed) {
-        throw new Error(rlData.message || `Too many OTP requests. Try again later.`);
+        throw new Error(rlData.message || `Too many OTP requests. Try again in 1 minute.`);
       }
 
       // Supabase phone OTP — requires phone auth enabled in Supabase dashboard
@@ -285,7 +285,7 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
         });
         const rlData = await rlRes.json().catch(() => ({}));
         if (!rlRes.ok || !rlData.allowed) {
-          throw new Error(rlData.message || `Account locked due to too many failed attempts. Try again later.`);
+          throw new Error(rlData.message || `Account locked due to too many failed attempts. Try again in 1 minute.`);
         }
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
