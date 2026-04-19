@@ -96,16 +96,10 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     
     setLoading(true); setError(null);
     try {
-      // C-09: Server-side rate limiting via Netlify function
-      const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: phone, action: 'otp_send' })
-      });
-      const rlData = await rlRes.json().catch(() => ({}));
-      if (!rlRes.ok || !rlData.allowed) {
-        throw new Error(rlData.message || `Too many OTP requests. Try again in 1 minute.`);
-      }
+      // Custom rate limiting removed
+      /*
+      const rlRes = await fetch('/.netlify/functions/check-rate-limit', ...
+      */
 
       // Supabase phone OTP — requires phone auth enabled in Supabase dashboard
       const { error } = await supabase.auth.signInWithOtp({ phone: `${countryCode}${phone.replace(/\D/g, '')}` });
@@ -277,26 +271,17 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           }
         } else { setSuccess('Please check your email to confirm your account.'); }
       } else {
-        // C-07: Server-side rate limiting via Netlify function
-        const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: email, action: 'login' })
-        });
-        const rlData = await rlRes.json().catch(() => ({}));
-        if (!rlRes.ok || !rlData.allowed) {
-          throw new Error(rlData.message || `Too many attempts. Please wait a few seconds.`);
-        }
+        // Custom rate limiting removed
+        /*
+        const rlRes = await fetch('/.netlify/functions/check-rate-limit', ...
+        */
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
-          if (signInError.message.toLowerCase().includes('invalid'))
-            throw new Error(`Incorrect email or password. Attempts recorded.`);
           throw signInError;
         }
         
-        // Reset rate limit on success
-        await supabase.rpc('reset_rate_limit', { p_identifier: email, p_action: 'login' });
+        // Rate limit reset removed
         
         if (data.user && !data.user.email_confirmed_at) {
           await supabase.auth.signOut();

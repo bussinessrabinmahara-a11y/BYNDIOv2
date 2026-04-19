@@ -204,34 +204,7 @@ BEGIN
 END;
 $body$;
 
-CREATE OR REPLACE FUNCTION public.check_rate_limit(p_identifier TEXT, p_action TEXT) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $body$
-BEGIN
-  RETURN COALESCE(
-    (SELECT jsonb_build_object('allowed', false, 'locked_until', locked_until)
-     FROM public.rate_limits WHERE identifier = p_identifier AND action = p_action
-     AND locked_until IS NOT NULL AND locked_until > now()),
-    jsonb_build_object('allowed', true)
-  );
-END;
-$body$;
 
-CREATE OR REPLACE FUNCTION public.record_failed_attempt(p_identifier TEXT, p_action TEXT, p_max INTEGER, p_lock_mins INTEGER)
-RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $body$
-BEGIN
-  INSERT INTO public.rate_limits (identifier, action, attempts, last_attempt) VALUES (p_identifier, p_action, 1, now())
-  ON CONFLICT (identifier, action) DO UPDATE SET
-    attempts = CASE WHEN rate_limits.last_attempt < now() - (p_lock_mins || ' minutes')::interval THEN 1 ELSE rate_limits.attempts + 1 END,
-    last_attempt = now();
-  IF (SELECT attempts FROM public.rate_limits WHERE identifier = p_identifier AND action = p_action) >= p_max THEN
-    UPDATE public.rate_limits SET locked_until = now() + (p_lock_mins || ' minutes')::interval WHERE identifier = p_identifier AND action = p_action;
-    RETURN jsonb_build_object('allowed', false, 'error', 'Too many attempts');
-  END IF;
-  RETURN jsonb_build_object('allowed', true, 'remaining', p_max - (SELECT attempts FROM public.rate_limits WHERE identifier = p_identifier AND action = p_action));
-END;
-$body$;
-
-CREATE OR REPLACE FUNCTION public.reset_rate_limit(p_identifier TEXT, p_action TEXT) RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
-BEGIN DELETE FROM public.rate_limits WHERE identifier = p_identifier AND action = p_action; END; $$;
 
 CREATE OR REPLACE FUNCTION public.validate_referral(p_referral_code TEXT, p_new_user_id UUID) RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER AS $body$
 BEGIN
@@ -253,7 +226,7 @@ ALTER TABLE public.addresses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reward_points ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.shipping_methods ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.rate_limits ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.affiliate_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referral_clicks ENABLE ROW LEVEL SECURITY;
@@ -291,7 +264,7 @@ DROP POLICY IF EXISTS "notif_ins" ON public.notifications; CREATE POLICY "notif_
 DROP POLICY IF EXISTS "notif_upd" ON public.notifications; CREATE POLICY "notif_upd" ON public.notifications FOR UPDATE USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "ship_view" ON public.shipping_methods; CREATE POLICY "ship_view" ON public.shipping_methods FOR SELECT USING (true);
 DROP POLICY IF EXISTS "ship_admin" ON public.shipping_methods; CREATE POLICY "ship_admin" ON public.shipping_methods FOR ALL USING (public.is_admin());
-DROP POLICY IF EXISTS "rl_all" ON public.rate_limits; CREATE POLICY "rl_all" ON public.rate_limits FOR ALL USING (true);
+
 DROP POLICY IF EXISTS "audit_admin" ON public.audit_logs; CREATE POLICY "audit_admin" ON public.audit_logs FOR ALL USING (public.is_admin());
 DROP POLICY IF EXISTS "audit_own" ON public.audit_logs; CREATE POLICY "audit_own" ON public.audit_logs FOR SELECT USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "as_own" ON public.affiliate_stats; CREATE POLICY "as_own" ON public.affiliate_stats FOR SELECT USING (auth.uid() = user_id);
@@ -312,7 +285,7 @@ DROP POLICY IF EXISTS "wl_own" ON public.wishlists; CREATE POLICY "wl_own" ON pu
 -- INDEXES
 CREATE INDEX IF NOT EXISTS idx_products_search ON public.products USING GIN (to_tsvector('english', name || ' ' || COALESCE(description, '')));
 CREATE INDEX IF NOT EXISTS idx_orders_buyer ON public.orders(buyer_id);
-CREATE INDEX IF NOT EXISTS idx_rl_id ON public.rate_limits(identifier, action);
+
 
 -- SEED DATA
 INSERT INTO public.shipping_methods (name, description, base_cost, cost, min_days, max_days)

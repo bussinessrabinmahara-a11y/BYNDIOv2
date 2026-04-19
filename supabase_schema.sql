@@ -202,11 +202,6 @@ CREATE TABLE IF NOT EXISTS public.coupons (
     expiry TIMESTAMPTZ, created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT now());
 
--- RATE LIMITS
-CREATE TABLE IF NOT EXISTS public.rate_limits (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), identifier TEXT NOT NULL, action TEXT NOT NULL,
-    attempts INTEGER DEFAULT 0, last_attempt TIMESTAMPTZ DEFAULT timezone('utc', now()),
-    locked_until TIMESTAMPTZ, UNIQUE(identifier, action));
 
 -- SHIPPING METHODS
 CREATE TABLE IF NOT EXISTS public.shipping_methods (
