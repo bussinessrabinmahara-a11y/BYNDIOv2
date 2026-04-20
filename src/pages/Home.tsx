@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import useEmblaCarousel from 'embla-carousel-react';
 import Autoplay from 'embla-carousel-autoplay';
 import { ChevronLeft, ChevronRight, Clock, Copy, Check, MapPin, Star, Zap, TrendingUp, ShoppingBag, Truck, RotateCcw, ShieldCheck, Shirt, Smartphone, Sparkles, Baby, Home as HomeIcon, Dumbbell, Book, Utensils, HeartPulse, Cat, Car, Search, Camera, Mic } from 'lucide-react';
@@ -63,11 +63,45 @@ export default function Home() {
   const recentlyViewed   = useAppStore(s => s.recentlyViewed);
   const fetchFlashSales  = useAppStore(s => s.fetchFlashSales);
 
+  const navigate = useNavigate();
+  const [mobileSearchQuery, setMobileSearchQuery] = useState('');
+  const [isListening, setIsListening] = useState(false);
+
   const [activeCat,    setActiveCat]    = useState<number|null>(null);
   const [copiedCoupon, setCopiedCoupon] = useState<string|null>(null);
   const follows          = useAppStore(s => s.follows);
   const toggleFollow     = useAppStore(s => s.toggleFollow);
   const [timeLeft,     setTimeLeft]     = useState({ h: 5, m: 23, s: 45 });
+
+  const handleMobileSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (mobileSearchQuery.trim()) {
+      navigate(`/products?search=${encodeURIComponent(mobileSearchQuery.trim())}`);
+    }
+  };
+
+  const handleMobileVoiceSearch = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice search is not supported in this browser. Try Chrome.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-IN';
+    recognition.start();
+    setIsListening(true);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setMobileSearchQuery(transcript);
+      setIsListening(false);
+      navigate(`/products?search=${encodeURIComponent(transcript)}`);
+    };
+
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+  };
 
   useEffect(() => { fetchFlashSales(); }, [fetchFlashSales]);
 
@@ -181,32 +215,44 @@ export default function Home() {
       {/* ══════════════════ MOBILE UI (< md) ══════════════════ */}
       <div className="md:hidden flex flex-col w-full bg-[#f8f9fa]">
         
-        {/* Search Bar - Mobile */}
-        <div className="px-3 py-1.5 bg-white sticky top-[56px] z-40 border-b border-gray-100 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
-          <div className="relative w-full flex items-center bg-[#F4F6F8] border border-gray-100 rounded-full h-[38px] px-1">
-            <Search className="absolute left-3 w-3.5 h-3.5 text-gray-400" />
-            <input type="text" placeholder="Search brands, styles & more" className="w-full h-full pl-8 pr-16 bg-transparent text-[12px] text-gray-900 placeholder-gray-400 font-medium focus:outline-none rounded-full" />
-            <div className="absolute right-3 flex items-center gap-2.5 text-gray-400 border-l border-gray-200 pl-2.5">
-              <Camera className="w-3.5 h-3.5 cursor-pointer hover:text-[#0D47A1]" />
-              <Mic className="w-3.5 h-3.5 cursor-pointer hover:text-[#0D47A1]" />
-            </div>
+        {/* Mobile Header - Search Bar Container */}
+        <div className="bg-white px-3 pt-2 pb-2 border-b border-gray-100 w-full">
+          <form onSubmit={handleMobileSearch} className="relative w-full flex items-center bg-[#F4F6F8] border border-gray-100 rounded-full h-[38px] px-1 shadow-inner">
+            <Search className="absolute left-4 w-3.5 h-3.5 text-gray-400" />
+            <input 
+              type="text" 
+              placeholder="Search brands, styles & more" 
+              value={mobileSearchQuery}
+              onChange={(e) => setMobileSearchQuery(e.target.value)}
+              className={`w-full h-full pl-10 pr-10 bg-transparent text-[12px] text-gray-900 placeholder-gray-400 font-medium focus:outline-none rounded-full ${isListening ? 'animate-pulse' : ''}`} 
+            />
+            <button 
+              type="button"
+              onClick={handleMobileVoiceSearch}
+              className={`absolute right-3 p-1.5 transition-colors ${isListening ? 'text-red-500 animate-bounce' : 'text-gray-400 hover:text-[#0D47A1]'}`}
+              aria-label="Voice Search"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+          </form>
+        </div>
+
+        {/* Categories Section - Individual Container */}
+        <div className="bg-white py-3 mb-1 border-b border-gray-50 overflow-hidden">
+          <div className="flex overflow-x-auto gap-5 px-4 scrollbar-hide snap-x items-start">
+            {CATEGORIES.map(cat => (
+              <Link key={cat.cat} to={`/products?cat=${cat.cat}`} className="flex flex-col items-center gap-1.5 snap-start shrink-0 group">
+                <div className="w-[32px] h-[32px] rounded-lg flex items-center justify-center transition-all shadow-sm group-active:scale-90" style={{ backgroundColor: cat.bg }}>
+                   {React.cloneElement(cat.icon as React.ReactElement, { size: 14, strokeWidth: 2, color: cat.color } as any)}
+                </div>
+                <span className="text-[8px] font-bold text-gray-500 tracking-tight uppercase">{cat.name}</span>
+              </Link>
+            ))}
           </div>
         </div>
 
-        {/* Categories Scroller - Mobile */}
-        <div className="flex overflow-x-auto gap-4 px-3 py-2 scrollbar-hide snap-x bg-white mb-1.5 border-b border-gray-50 items-start">
-          {CATEGORIES.map(cat => (
-            <Link key={cat.cat} to={`/products?cat=${cat.cat}`} className="flex flex-col items-center gap-1 snapt-start shrink-0 group">
-              <div className="w-[34px] h-[34px] rounded-xl flex items-center justify-center transition-all shadow-sm group-active:scale-90" style={{ backgroundColor: cat.bg }}>
-                 {React.cloneElement(cat.icon as React.ReactElement, { size: 16, strokeWidth: 2, color: cat.color } as any)}
-              </div>
-              <span className="text-[7px] font-black text-gray-400 tracking-tighter uppercase">{cat.name}</span>
-            </Link>
-          ))}
-        </div>
-
         {/* Hero Banner - Mobile */}
-        <div className="px-3 mb-3 relative group w-full">
+        <div className="px-3 mt-1 mb-5 relative group w-full">
           <div className="overflow-hidden rounded-[16px] shadow-sm relative" ref={mobileEmblaRef}>
             <div className="flex">
               {slides.map((s, idx) => (

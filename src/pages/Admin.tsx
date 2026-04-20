@@ -3134,6 +3134,128 @@ function CompliancePanel() {
   );
 }
 
+// ================================================================
+// REVENUE DASHBOARD
+// ================================================================
+function RevenueDashboard() {
+  const [revenueStats, setRevenueStats] = useState({
+    total: 0,
+    bySource: {} as Record<string, number>,
+    recentTransactions: [] as any[]
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRevenue();
+  }, []);
+
+  const fetchRevenue = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('platform_revenue').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      
+      let total = 0;
+      let bySource: Record<string, number> = {};
+      let recentTransactions = data.slice(0, 15);
+
+      data.forEach(item => {
+        total += item.amount;
+        bySource[item.source] = (bySource[item.source] || 0) + item.amount;
+      });
+
+      setRevenueStats({ total, bySource, recentTransactions });
+    } catch (err: any) {
+      toast('Failed to load revenue data: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const SOURCE_LABELS: Record<string, { label: string, color: string, icon: string }> = {
+    subscription: { label: 'Subscriptions', color: 'text-purple-600', icon: '👑' },
+    boost: { label: 'Ads & Boost', color: 'text-orange-600', icon: '🚀' },
+    featured_store: { label: 'Featured Stores', color: 'text-blue-600', icon: '💎' },
+    premium_badge: { label: 'Premium Badges', color: 'text-green-600', icon: '⭐' },
+    platform_fee: { label: 'Platform Fees', color: 'text-gray-900', icon: '💸' },
+    logistics: { label: 'Logistics Margin', color: 'text-yellow-600', icon: '🚚' },
+    saas: { label: 'SaaS Tools', color: 'text-teal-600', icon: '🛠️' }
+  };
+
+  if (loading) return <div className="p-10 text-center text-gray-400">Loading revenue data...</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-black text-[#0D47A1] flex items-center gap-2"><DollarSign className="w-6 h-6" /> Revenue Dashboard</h2>
+        <button onClick={fetchRevenue} className="p-2 text-gray-400 hover:text-[#0D47A1] hover:bg-gray-100 rounded-lg">
+          <RefreshCw size={14} />
+        </button>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+        <div>
+          <div className="text-[12px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Platform Revenue</div>
+          <div className="text-4xl font-black text-green-600">₹{revenueStats.total.toLocaleString('en-IN')}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[11px] font-bold text-gray-500 mb-1">Current Month</div>
+          <div className="text-xl font-black text-gray-900">₹{revenueStats.total.toLocaleString('en-IN')}</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Object.entries(revenueStats.bySource).map(([source, amount]) => {
+          const config = SOURCE_LABELS[source] || { label: source, color: 'text-gray-900', icon: '💰' };
+          return (
+            <div key={source} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[11px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1.5">{config.icon} {config.label}</span>
+              </div>
+              <div className={`text-2xl font-black ${config.color}`}>₹{amount.toLocaleString('en-IN')}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="font-black text-[15px]">Recent Transactions</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px]">
+            <thead className="bg-gray-50 text-[11px] font-bold text-gray-400 uppercase">
+              <tr>
+                <th className="px-5 py-3">Date</th>
+                <th className="px-5 py-3">Source</th>
+                <th className="px-5 py-3">Amount</th>
+                <th className="px-5 py-3">User ID</th>
+                <th className="px-5 py-3">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {revenueStats.recentTransactions.map(tx => (
+                <tr key={tx.id} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+                  <td className="px-5 py-4 text-gray-500">{new Date(tx.created_at).toLocaleString('en-IN')}</td>
+                  <td className="px-5 py-4 font-bold capitalize">{tx.source.replace('_', ' ')}</td>
+                  <td className="px-5 py-4 font-black text-green-600">₹{tx.amount.toLocaleString('en-IN')}</td>
+                  <td className="px-5 py-4 text-[11px] text-gray-400">{tx.user_id?.slice(0, 8)}...</td>
+                  <td className="px-5 py-4 text-gray-600">{tx.description}</td>
+                </tr>
+              ))}
+              {revenueStats.recentTransactions.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-10 text-center text-gray-400">No revenue transactions yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   usePageTitle('Admin Panel');
   const { user } = useAppStore();
@@ -3186,6 +3308,7 @@ export default function Admin() {
       items: [
         { id: 'overview', icon: BarChart2, label: 'Dashboard', badge: 0 },
         { id: 'analytics', icon: TrendingUp, label: 'Analytics', badge: 0 },
+        { id: 'revenue', icon: DollarSign, label: 'Revenue Dashboard', badge: 0 },
       ]
     },
     {
@@ -3255,6 +3378,7 @@ export default function Admin() {
       case 'settings': return <SiteSettingsManager />;
       case 'security': return <SecurityPanel />;
       case 'compliance': return <CompliancePanel />;
+      case 'revenue': return <RevenueDashboard />;
       default: return <OverviewPanel />;
     }
   };

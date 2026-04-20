@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { usePageTitle } from '../lib/usePageTitle';
 import { useSearchParams, Link } from 'react-router-dom';
 import { SlidersHorizontal, X } from 'lucide-react';
@@ -15,12 +15,25 @@ export default function Products() {
   const catParam = searchParams.get('cat') || '';
   const refCode = searchParams.get('ref') || '';
   const { products: storeProducts } = useAppStore();
+  const loaderRef = useRef<HTMLDivElement>(null);
 
-  // M-06: Dynamic categories from store products (fallback) - Moved to top to avoid TDZ
+  // M-06: Dynamic categories from DB
+  const [dbCategories, setDbCategories] = useState<string[]>([]);
+  useEffect(() => {
+    supabase.from('products').select('category').eq('is_active', true)
+      .then(({ data, error }) => {
+        if (!error && data) {
+          const uniqueCats = [...new Set(data.map(d => d.category).filter(Boolean))];
+          if (uniqueCats.length > 0) setDbCategories(uniqueCats);
+        }
+      });
+  }, []);
+
   const CATEGORIES = useMemo(() => {
-    const allCats = [...new Set(storeProducts.map(p => p.cat))];
+    if (dbCategories.length > 0) return dbCategories;
+    const allCats = [...new Set(storeProducts.map(p => p.category || p.cat))];
     return allCats.length > 0 ? allCats : ['Fashion', 'Electronics', 'Beauty', 'Kids', 'Sports'];
-  }, [storeProducts]);
+  }, [storeProducts, dbCategories]);
   
   // Server-side products state (H-03, H-04, M-05, M-06)
   const [realProducts, setRealProducts] = useState<any[]>([]);
@@ -97,7 +110,7 @@ export default function Products() {
 
       const { data, count, error } = await q;
       if (error) throw error;
-      setRealProducts(data || []);
+      setRealProducts(prev => page === 1 ? (data || []) : [...prev, ...(data || [])]);
       setTotalProducts(count || 0);
     } catch (err) {
       console.error('Error fetching products:', err);
@@ -111,6 +124,17 @@ export default function Products() {
       setCats([catParam]);
     }
   }, [catParam]);
+
+  // M-05: Infinite Scroll Observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && !isDBLoading && realProducts.length < totalProducts) {
+        setPage(p => p + 1);
+      }
+    }, { threshold: 0.1 });
+    if (loaderRef.current) observer.observe(loaderRef.current);
+    return () => observer.disconnect();
+  }, [isDBLoading, realProducts.length, totalProducts]);
 
   const clearFilters = () => {
     setCats(CATEGORIES);
@@ -157,19 +181,26 @@ export default function Products() {
       {/* Price Range */}
       <div>
         <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-500 mb-2.5">Price Range</div>
-        <div className="flex items-center justify-between text-[12px] font-bold mb-2">
-          <span className="bg-gray-100 px-2 py-1 rounded">₹{priceRange[0].toLocaleString('en-IN')}</span>
-          <span className="text-gray-400">–</span>
-          <span className="bg-gray-100 px-2 py-1 rounded">₹{priceRange[1].toLocaleString('en-IN')}</span>
+        <div className="flex flex-col gap-2">
+          <label className="text-[10px] text-gray-500 font-bold">Min Price: ₹{priceRange[0].toLocaleString('en-IN')}</label>
+          <input
+            type="range"
+            min={globalMin}
+            max={globalMax}
+            value={priceRange[0]}
+            onChange={e => setPriceRange([Math.min(parseInt(e.target.value), priceRange[1]), priceRange[1]])}
+            className="w-full accent-[#1565C0]"
+          />
+          <label className="text-[10px] text-gray-500 font-bold mt-2">Max Price: ₹{priceRange[1].toLocaleString('en-IN')}</label>
+          <input
+            type="range"
+            min={globalMin}
+            max={globalMax}
+            value={priceRange[1]}
+            onChange={e => setPriceRange([priceRange[0], Math.max(parseInt(e.target.value), priceRange[0])])}
+            className="w-full accent-[#1565C0]"
+          />
         </div>
-        <input
-          type="range"
-          min={globalMin}
-          max={globalMax}
-          value={priceRange[1]}
-          onChange={e => setPriceRange([priceRange[0], parseInt(e.target.value)])}
-          className="w-full accent-[#1565C0]"
-        />
         <div className="flex gap-2 mt-2">
           <input
             type="number"
@@ -309,34 +340,9 @@ export default function Products() {
               >
                 {realProducts.map(p => <ProductCard key={p.id} product={p} />)}
               </motion.div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-1 mt-6 flex-wrap pb-4">
-                  <button
-                    onClick={() => { setPage(p => Math.max(1, p - 1)); window.scrollTo(0, 0); }}
-                    disabled={page === 1}
-                    className="px-2.5 py-1.5 rounded border border-gray-200 text-[11px] font-black disabled:opacity-40 bg-white"
-                  >
-                    ←
-                  </button>
-                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                    const p = totalPages <= 5 ? i + 1
-                      : page <= 3 ? i + 1
-                      : page >= totalPages - 2 ? totalPages - 4 + i
-                      : page - 2 + i;
-                    return (
-                      <button key={p} onClick={() => { setPage(p); window.scrollTo(0, 0); }}
-                        className={`w-7 h-7 rounded text-[11px] font-black transition-all ${page === p ? 'bg-[#0D47A1] text-white shadow-sm' : 'bg-white border border-gray-200'}`}>
-                        {p}
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => { setPage(p => Math.min(totalPages, p + 1)); window.scrollTo(0, 0); }}
-                    disabled={page === totalPages}
-                    className="px-2.5 py-1.5 rounded border border-gray-200 text-[11px] font-black disabled:opacity-40 bg-white"
-                  >
-                    →
-                  </button>
+              {realProducts.length < totalProducts && (
+                <div ref={loaderRef} className="py-8 flex justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0D47A1]"></div>
                 </div>
               )}
             </>

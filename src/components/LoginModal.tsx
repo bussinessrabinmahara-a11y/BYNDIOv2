@@ -96,10 +96,16 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     
     setLoading(true); setError(null);
     try {
-      // Custom rate limiting removed
-      /*
-      const rlRes = await fetch('/.netlify/functions/check-rate-limit', ...
-      */
+      // C-09: Server-side OTP rate limiting
+      const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: `${countryCode}${phone.replace(/\D/g, '')}`, action: 'otp_send' })
+      });
+      const rlData = await rlRes.json().catch(() => ({}));
+      if (!rlRes.ok || !rlData.allowed) {
+        throw new Error(rlData.error || 'Too many OTP requests. Please try again later.');
+      }
 
       // Supabase phone OTP — requires phone auth enabled in Supabase dashboard
       const { error } = await supabase.auth.signInWithOtp({ phone: `${countryCode}${phone.replace(/\D/g, '')}` });
@@ -192,29 +198,29 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     setLoading(true);
     
     try {
-      // C-06: CAPTCHA check disabled for now
-      // const formData = new FormData(e.currentTarget as HTMLFormElement);
-      // const turnstileToken = formData.get('cf-turnstile-response');
-      // if (!turnstileToken) {
-      //   setError('Please complete the CAPTCHA verification.');
-      //   setLoading(false);
-      //   return;
-      // }
+      // C-06: CAPTCHA check
+      const formData = new FormData(e.currentTarget as HTMLFormElement);
+      const turnstileToken = formData.get('cf-turnstile-response');
+      if (!turnstileToken) {
+        setError('Please complete the CAPTCHA verification.');
+        setLoading(false);
+        return;
+      }
 
       // CAPTCHA verification via Netlify function
-      // const tsRes = await fetch(`/.netlify/functions/verify-captcha`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ response: turnstileToken }) // Send `response` token
-      // });
-      // const tsData = await tsRes.json().catch(() => ({}));
-      // if (!tsRes.ok || tsData.success !== true) {
-      //   setError(tsData.error || 'CAPTCHA verification failed. Please try again.');
-      //   setLoading(false);
-      //   // @ts-ignore
-      //   if (window.turnstile) window.turnstile.reset();
-      //   return;
-      // }
+      const tsRes = await fetch(`/.netlify/functions/verify-captcha`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ response: turnstileToken }) // Send `response` token
+      });
+      const tsData = await tsRes.json().catch(() => ({}));
+      if (!tsRes.ok || tsData.success !== true) {
+        setError(tsData.error || 'CAPTCHA verification failed. Please try again.');
+        setLoading(false);
+        // @ts-ignore
+        if (window.turnstile) window.turnstile.reset();
+        return;
+      }
 
       if (tab === 'register') {
         const { data, error: signUpError } = await supabase.auth.signUp({ 
@@ -271,10 +277,16 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           }
         } else { setSuccess('Please check your email to confirm your account.'); }
       } else {
-        // Custom rate limiting removed
-        /*
-        const rlRes = await fetch('/.netlify/functions/check-rate-limit', ...
-        */
+        // C-07: Server-side login lockout
+        const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: email.toLowerCase(), action: 'login' })
+        });
+        const rlData = await rlRes.json().catch(() => ({}));
+        if (!rlRes.ok || !rlData.allowed) {
+          throw new Error(rlData.error || 'Too many attempts. Please try again later.');
+        }
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
@@ -485,8 +497,8 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
                 )}
                 {error && <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-md p-3 text-red-700 text-[12px]"><AlertCircle size={15} className="shrink-0 mt-0.5"/>{error}</div>}
                 {success && <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-md p-3 text-green-700 text-[12px]">✅ {success}</div>}
-                        {/* Cloudflare Turnstile CAPTCHA disabled */}
-                {/* <div className="cf-turnstile" data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} data-theme="light" data-size="flexible" /> */}
+                {/* Cloudflare Turnstile CAPTCHA */}
+                <div className="cf-turnstile" data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} data-theme="light" data-size="flexible" />
 
                 <button type="submit" disabled={loading}
                   className="w-full bg-[#0D47A1] hover:bg-[#1565C0] disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 rounded-md text-[14px] font-extrabold transition-colors flex items-center justify-center gap-2">

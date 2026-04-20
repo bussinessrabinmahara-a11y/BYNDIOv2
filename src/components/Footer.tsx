@@ -24,29 +24,29 @@ export default function Footer() {
         <div className="absolute top-0 right-10 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-10 w-64 h-64 bg-[#F57C00]/20 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 relative z-20 items-center">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-4 md:gap-12 relative z-20 items-start md:items-center">
           
           {/* Column 1: Seller Info */}
-          <div className="flex flex-col items-start pr-2 md:pr-8 border-b md:border-b-0 md:border-r border-white/10 pb-6 md:pb-0 h-fit">
-            <span className="inline-block bg-[#F57C00] text-white text-[6px] md:text-[9px] font-black tracking-widest px-1.5 py-[1px] rounded-full mb-1.5 shadow-md uppercase">
+          <div className="flex flex-col items-start pr-2 md:pr-8 md:border-r border-white/10 h-fit">
+            <span className="inline-block bg-[#F57C00] text-white text-[7px] md:text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full mb-1.5 shadow-md uppercase">
               REGISTER
             </span>
-            <h2 className="text-[10px] md:text-[24px] font-black leading-[1.1] mb-2.5">
+            <h2 className="text-[14px] md:text-[24px] font-black leading-tight mb-2.5">
               Start <br className="md:hidden"/> Selling
             </h2>
-            <Link to="/seller" className="bg-gradient-to-r from-[#F57C00] to-[#E65100] hover:from-[#E65100] hover:to-[#F57C00] text-white px-2 py-1.5 rounded-lg text-[9px] md:text-[14px] font-black transition-all shadow-lg text-center w-full border border-white/10">Start Now</Link>
+            <Link to="/seller" className="bg-gradient-to-r from-[#F57C00] to-[#E65100] hover:from-[#E65100] hover:to-[#F57C00] text-white px-3 py-1.5 rounded-lg text-[10px] md:text-[14px] font-black transition-all shadow-lg text-center w-full border border-white/10 active:scale-95">Start Now</Link>
           </div>
 
           {/* Column 2: Benefits Checklist */}
-          <div className="flex flex-col items-start border-b md:border-b-0 md:border-r border-white/10 py-6 md:py-0 px-0 md:px-8 h-fit">
-             <h3 className="font-black text-[9px] md:text-[16px] mb-2.5 md:mb-4 uppercase tracking-widest text-white/80">Benefits</h3>
-             <div className="flex flex-col gap-2 w-full">
+          <div className="flex flex-col items-start md:border-r border-white/10 px-0 md:px-8 h-fit">
+             <h3 className="font-black text-[10px] md:text-[16px] mb-2 md:mb-4 uppercase tracking-widest text-white/70">Benefits</h3>
+             <div className="grid grid-cols-1 gap-1.5 md:gap-2 w-full">
               {['0% Comms','No Stock','Pan India','Fast Pay'].map(f => (
                 <div key={f} className="flex items-center gap-1.5 text-white">
-                  <div className="w-2.5 h-2.5 md:w-5 md:h-5 bg-white/20 rounded-full flex items-center justify-center shrink-0 border border-white/20">
-                    <span className="text-[6px] md:text-[10px] font-black">✓</span>
+                  <div className="w-3.5 h-3.5 md:w-5 md:h-5 bg-white/15 rounded-full flex items-center justify-center shrink-0 border border-white/10">
+                    <span className="text-[7px] md:text-[10px] font-black">✓</span>
                   </div>
-                  <span className="text-[9px] md:text-[13px] font-black leading-none opacity-90">{f}</span>
+                  <span className="text-[10px] md:text-[13px] font-black leading-none opacity-90">{f}</span>
                 </div>
               ))}
             </div>
@@ -57,20 +57,27 @@ export default function Footer() {
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            className="flex flex-col items-center md:items-start text-center md:text-left h-fit pt-6 md:pt-0 pl-0 md:pl-8"
+            className="col-span-2 md:col-span-1 flex flex-col items-start md:items-start text-left h-fit pt-4 md:pt-0 pl-0 md:pl-8 border-t md:border-t-0 border-white/10"
           >
-            <div className="mb-2 flex items-center justify-center bg-white/10 rounded-lg p-1.5 backdrop-blur-md border border-white/10 w-fit">
-              <Smartphone size={14} className="text-white md:w-7 md:h-7" />
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center justify-center bg-white/10 rounded-lg p-1.5 backdrop-blur-md border border-white/10 w-fit">
+                <Smartphone size={14} className="text-white md:w-6 md:h-6" />
+              </div>
+              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-2">
+                <h3 className="font-black text-[12px] md:text-[20px] leading-tight">Get App</h3>
+                <span className="bg-white/20 text-white/90 text-[7px] md:text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-widest border border-white/10 w-fit">
+                  Coming Soon
+                </span>
+              </div>
             </div>
-            <h3 className="font-black text-[10px] md:text-[20px] mb-1.5 leading-tight">Get App</h3>
-            <div className="flex flex-col gap-1.5 w-full">
-              <a href="#" className="bg-black/90 hover:bg-black border border-white/10 rounded-lg p-1 text-white flex items-center justify-center gap-1.5 transition-all active:scale-95">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" alt="Apple" className="w-3 h-3 md:w-5 md:h-5 object-contain" />
-                <span className="text-[8px] md:text-[12px] font-black">App Store</span>
+            <div className="flex flex-row md:flex-col gap-2 w-full">
+              <a href="#" className="flex-1 bg-black/90 hover:bg-black border border-white/10 rounded-xl px-2.5 py-1.5 text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" alt="Apple" className="w-3.5 h-3.5 md:w-5 md:h-5 object-contain" />
+                <span className="text-[10px] md:text-[12px] font-black">App Store</span>
               </a>
-              <a href="#" className="bg-black/90 hover:bg-black border border-white/10 rounded-lg p-1 text-white flex items-center justify-center gap-1.5 transition-all active:scale-95">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" alt="Google Play" className="w-3 h-3 md:w-5 md:h-5 object-contain" />
-                <span className="text-[8px] md:text-[12px] font-black">Play Store</span>
+              <a href="#" className="flex-1 bg-black/90 hover:bg-black border border-white/10 rounded-xl px-2.5 py-1.5 text-white flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/Google_Play_Arrow_logo.svg" alt="Google Play" className="w-3.5 h-3.5 md:w-5 md:h-5 object-contain" />
+                <span className="text-[10px] md:text-[12px] font-black">Play Store</span>
               </a>
             </div>
           </motion.div>

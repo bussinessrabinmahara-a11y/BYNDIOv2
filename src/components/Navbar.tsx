@@ -86,9 +86,9 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-[#0D47A1]/95 backdrop-blur-md text-white shadow-lg border-b border-white/5">
+    <nav className="sticky top-0 z-50 bg-[#0D47A1]/95 backdrop-blur-md text-white shadow-sm md:shadow-lg border-b border-white/5 h-[44px] md:h-[64px]">
       <div className="w-full px-2.5 md:px-6">
-        <div className="flex items-center justify-between h-[48px] md:h-[64px]">
+        <div className="flex items-center justify-between h-[44px] md:h-[64px]">
           
           {/* LOGO - Scaled Down Perfectly to Left Edge */}
           <motion.div 
@@ -308,18 +308,18 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
             </button>
 
             <Link to="/notifications" className="hover:bg-white/10 p-1.5 rounded-full transition-colors relative group text-white">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 group-hover:scale-105 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-[18px] h-[18px] md:w-5 md:h-5 group-hover:scale-105 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
               <span className="absolute top-[3px] right-[3px] w-[4px] h-[4px] bg-[#F50057] rounded-full"></span>
             </Link>
             <Link to="/wishlist" className="hover:bg-white/10 p-1.5 rounded-full transition-colors relative group text-white" aria-label="Wishlist">
-              <Heart className="w-5 h-5 group-hover:scale-105 transition-transform stroke-[2]" />
+              <Heart className="w-[18px] h-[18px] md:w-5 md:h-5 group-hover:scale-105 transition-transform stroke-[2]" />
             </Link>
             <button
               onClick={onOpenCart}
               className="relative hover:bg-white/10 p-1.5 rounded-full transition-colors group text-white"
               aria-label="Cart"
             >
-              <ShoppingCart className="w-5 h-5 group-hover:scale-105 transition-transform stroke-[2]" />
+              <ShoppingCart className="w-[18px] h-[18px] md:w-5 md:h-5 group-hover:scale-105 transition-transform stroke-[2]" />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-0.5 w-[11px] h-[11px] bg-[#F57C00] shadow-sm text-white text-[6px] font-black rounded-full flex items-center justify-center animate-bounce ring-1 ring-[#0D47A1]">
                   {cartCount > 9 ? '9+' : cartCount}
@@ -349,7 +349,7 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
               className="lg:hidden flex p-1 -mr-1 hover:bg-white/10 rounded-full transition-colors ml-1 text-white"
               aria-label="Menu"
             >
-              {isMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[1.5]" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6 stroke-[1.5]" />}
+              {isMenuOpen ? <X className="w-[18px] h-[18px] sm:w-6 sm:h-6 stroke-[1.5]" /> : <Menu className="w-[18px] h-[18px] sm:w-6 sm:h-6 stroke-[1.5]" />}
             </button>
           </div>
         </div>
@@ -360,7 +360,7 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="lg:hidden fixed top-[49px] md:top-[65px] left-0 w-full h-[calc(100vh-49px)] md:h-[calc(100vh-65px)] bg-white text-gray-900 overflow-y-auto pb-20 shadow-[-10px_10px_30px_rgba(0,0,0,0.1)] z-40 border-t border-gray-100 px-4 pt-4"
+              className="lg:hidden fixed top-[44px] md:top-[65px] left-0 w-full h-[calc(100vh-44px)] md:h-[calc(100vh-65px)] bg-white text-gray-900 overflow-y-auto pb-20 shadow-[-10px_10px_30px_rgba(0,0,0,0.1)] z-40 border-t border-gray-100 px-4 pt-4"
             >
               {/* Mobile Location Picker - Light Theme */}
               <button 

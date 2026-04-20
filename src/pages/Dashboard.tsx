@@ -580,6 +580,7 @@ export default function Dashboard() {
     { id: 'products', icon: Tag, label: 'My Products', locked: kycStatus !== 'approved' },
     { id: 'orders', icon: Package, label: 'Orders', locked: kycStatus !== 'approved' },
     { id: 'earnings', icon: DollarSign, label: 'Earnings', locked: kycStatus !== 'approved' },
+    { id: 'ads', icon: Megaphone, label: 'Ads & Boost', locked: kycStatus !== 'approved' },
     { id: 'analytics', icon: TrendingUp, label: 'Analytics', locked: kycStatus !== 'approved' },
     { id: 'campaigns', icon: Star, label: 'Brand Campaigns', locked: kycStatus !== 'approved' },
     { id: 'kyc', icon: Shield, label: 'KYC Status' },
@@ -1494,52 +1495,37 @@ export default function Dashboard() {
                     {storeInfo.subscription_plan}
                   </span>
                 </div>
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50">
+                <div className="space-y-3">
+                  <div className="p-3 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50">
                     <div className="text-[12px] font-bold text-gray-900 mb-1">Current Plan: {storeInfo.subscription_plan.toUpperCase()}</div>
-                    <div className="text-[10px] text-gray-500 mb-3">
-                      {storeInfo.subscription_plan === 'free' ? 'Upgrade to Pro for 0% commission and advanced tools.' : 'You have access to all premium seller features.'}
+                    <div className="text-[10px] text-gray-500 mb-2">
+                      {storeInfo.subscription_plan === 'free' ? 'Upgrade to unlock more products, analytics & boost tools.' : 'You have access to premium seller features.'}
                     </div>
-                    {storeInfo.subscription_plan === 'free' && (
-                      <div className="grid grid-cols-1 gap-2">
-                        <button 
-                          onClick={() => {
-                            initiateSubscriptionPayment(
-                              { name: 'Starter', price: 499, priceDisplay: '₹499/mo', role: 'seller' },
-                              { id: user!.id, name: user!.name || user!.email || '', email: user!.email || '' },
-                              () => { toastSuccess('Starter plan activated!'); loadSellerSettings(); },
-                              (msg) => { toast(msg, 'error'); }
-                            );
-                          }}
-                          className="w-full bg-[#E65100] hover:bg-[#F57C00] text-white py-2 rounded-lg text-[11px] font-black transition-all">
-                          Upgrade to Starter — ₹499/mo
-                        </button>
-                        <button 
-                          onClick={() => {
-                            initiateSubscriptionPayment(
-                              { name: 'Pro', price: 1999, priceDisplay: '₹1,999/mo', role: 'seller' },
-                              { id: user!.id, name: user!.name || user!.email || '', email: user!.email || '' },
-                              () => { toastSuccess('Pro plan activated!'); loadSellerSettings(); },
-                              (msg) => { toast(msg, 'error'); }
-                            );
-                          }}
-                          className="w-full bg-[#0D47A1] hover:bg-[#1565C0] text-white py-2 rounded-lg text-[11px] font-black transition-all">
-                          Upgrade to Pro — ₹1,999/mo
-                        </button>
-                      </div>
-                    )}
                   </div>
-                  
-                  <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100">
-                    <div className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-1">Plan Features</div>
-                    <div className="space-y-1">
-                      {['0% Commission', 'Priority Ranking', 'Featured Seller Badge', 'Bulk Catalog Tools'].map(f => (
-                        <div key={f} className="flex items-center gap-1.5 text-[10px] text-blue-800 font-medium">
-                          <Check size={10} className="shrink-0" /> {f}
+                  {[{ name: 'Basic', price: 499, color: '#E65100', features: '25 products, Basic analytics' },
+                    { name: 'Pro', price: 1499, color: '#0D47A1', features: '100 products, AI tools, 3 free boosts/mo' },
+                    { name: 'Brand', price: 2999, color: '#7B1FA2', features: 'Unlimited products, Custom store page' },
+                  ].filter(p => p.name.toLowerCase() !== storeInfo.subscription_plan).map(plan => (
+                    <button key={plan.name}
+                      onClick={() => {
+                        initiateSubscriptionPayment(
+                          { name: plan.name, price: plan.price, priceDisplay: `₹${plan.price}/mo`, role: 'seller' },
+                          { id: user!.id, name: user!.name || user!.email || '', email: user!.email || '' },
+                          () => { toastSuccess(`${plan.name} plan activated!`); loadSellerSettings(); },
+                          (msg) => { toast(msg, 'error'); }
+                        );
+                      }}
+                      className="w-full text-left p-3 rounded-xl border border-gray-200 hover:shadow-md transition-all group">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[12px] font-black" style={{color: plan.color}}>{plan.name}</span>
+                          <span className="text-[10px] text-gray-400 ml-2">₹{plan.price}/mo</span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                        <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600" />
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">{plan.features}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="bg-white rounded-[10px] p-5 shadow-sm">
@@ -1623,59 +1609,102 @@ export default function Dashboard() {
       case 'ads':
         return (
           <>
-            <div className="text-xl font-black text-[#0D47A1] mb-4">🚀 Ads & Boost</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              <div className="bg-white border border-gray-200 rounded-[10px] p-5 flex items-start gap-3.5">
-                <div className="text-[28px] shrink-0">🔝</div>
-                <div className="flex-1">
-                  <div className="text-sm font-extrabold mb-1">Homepage Featured</div>
-                  <div className="text-xs text-gray-500 leading-relaxed mb-3">Get featured on homepage for 10X more views. ₹2,999/week</div>
+            <div className="text-xl font-black text-[#0D47A1] mb-4 flex items-center gap-2"><Megaphone className="w-6 h-6" /> Ads & Product Boost</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+              {[
+                { type: 'feed_boost', icon: '📱', label: 'Feed Boost', desc: 'Priority in reels & feed', color: '#E040FB' },
+                { type: 'product_boost', icon: '🔝', label: 'Top Placement', desc: 'Top of category listings', color: '#0D47A1' },
+                { type: 'search_ad', icon: '🔍', label: 'Search Ads', desc: 'Sponsored in search results', color: '#E65100' },
+                { type: 'category_boost', icon: '📂', label: 'Category Banner', desc: 'Highlighted in category page', color: '#2E7D32' },
+              ].map(b => (
+                <div key={b.type} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+                  <div className="text-2xl mb-2">{b.icon}</div>
+                  <div className="text-[13px] font-black mb-0.5" style={{color: b.color}}>{b.label}</div>
+                  <div className="text-[10px] text-gray-500 mb-3">{b.desc}</div>
                   {products.length > 0 ? (
                     <div className="flex flex-col gap-2">
-                      <select id="boost-product" className="p-2 border border-gray-300 rounded text-xs outline-none focus:border-[#E65100]">
+                      <select className={`boost-select-${b.type} p-1.5 border border-gray-200 rounded-lg text-[11px] outline-none`}>
                         {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
-                      <button onClick={async () => {
-                        const sel = (document.getElementById('boost-product') as HTMLSelectElement)?.value;
-                        if (!sel) return;
-                        const until = new Date(Date.now() + 7 * 24 * 3600000).toISOString();
-                        const { error } = await supabase.from('products').update({ is_sponsored: true, sponsored_until: until }).eq('id', sel).eq('seller_id', user!.id);
-                        if (!error) toastSuccess('Homepage boost activated for 7 days!');
-                        else toast('Failed to activate boost: ' + error.message, 'error');
-                      }} className="bg-[#E65100] hover:bg-[#F57C00] text-white px-4 py-2 rounded text-xs font-bold transition-colors">Boost Now — ₹2,999/week</button>
+                      {[{dur: '24h', price: b.type === 'feed_boost' ? 99 : b.type === 'product_boost' ? 149 : b.type === 'search_ad' ? 199 : 299},
+                        {dur: '7 days', price: b.type === 'feed_boost' ? 499 : b.type === 'product_boost' ? 799 : b.type === 'search_ad' ? 999 : 1499},
+                      ].map(opt => (
+                        <button key={opt.dur} onClick={async () => {
+                          const sel = (document.querySelector(`.boost-select-${b.type}`) as HTMLSelectElement)?.value;
+                          if (!sel) return;
+                          try {
+                            const session = await supabase.auth.getSession();
+                            const res = await fetch('/.netlify/functions/purchase-boost', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.data.session?.access_token}` },
+                              body: JSON.stringify({ productId: sel, boostPackageId: null, paymentId: 'DEMO-' + Date.now() })
+                            });
+                            const data = await res.json();
+                            if (res.ok) toastSuccess(`${b.label} activated! ${data.boost?.usedFreeBoost ? '(Free boost used)' : ''}`);
+                            else toast(data.error || 'Boost failed', 'error');
+                          } catch {
+                            // Fallback: direct DB update for local dev
+                            const until = new Date(Date.now() + (opt.dur === '24h' ? 24 : 168) * 3600000).toISOString();
+                            await supabase.from('products').update({ is_sponsored: true, sponsored_until: until }).eq('id', sel).eq('seller_id', user!.id);
+                            toastSuccess(`${b.label} activated for ${opt.dur}!`);
+                          }
+                        }} className="w-full text-white py-1.5 rounded-lg text-[10px] font-black transition-all hover:opacity-90" style={{backgroundColor: b.color}}>
+                          {opt.dur} — ₹{opt.price}
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    <p className="text-xs text-gray-400">Add products first to boost them.</p>
-                  )}
+                  ) : <p className="text-[10px] text-gray-400">Add products first</p>}
                 </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                <div className="text-[13px] font-black text-gray-900 mb-3 flex items-center gap-2"><ShieldCheck size={16} className="text-[#2E7D32]" /> Premium Seller Badge</div>
+                <div className="text-[11px] text-gray-500 mb-3">Increase trust & conversion with a verified badge on your products.</div>
+                {[{type: 'verified', price: 299, label: '✅ Verified Seller'}, {type: 'trusted', price: 599, label: '⭐ Trusted Seller'}, {type: 'premium', price: 999, label: '💎 Premium Seller'}].map(badge => (
+                  <button key={badge.type} onClick={async () => {
+                    try {
+                      const session = await supabase.auth.getSession();
+                      const res = await fetch('/.netlify/functions/purchase-badge', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.data.session?.access_token}` },
+                        body: JSON.stringify({ badgeType: badge.type, paymentId: 'DEMO-' + Date.now() })
+                      });
+                      const data = await res.json();
+                      if (res.ok) toastSuccess(`${badge.label} badge activated!`);
+                      else toast(data.error || 'Badge purchase failed', 'error');
+                    } catch { toast('Badge service unavailable', 'error'); }
+                  }} className="w-full flex items-center justify-between p-2.5 border border-gray-100 rounded-lg mb-2 hover:bg-gray-50 transition-all text-left">
+                    <span className="text-[11px] font-bold">{badge.label}</span>
+                    <span className="text-[10px] font-black text-[#0D47A1]">₹{badge.price}/mo</span>
+                  </button>
+                ))}
               </div>
-              <div className="bg-white border border-gray-200 rounded-[10px] p-5 flex items-start gap-3.5">
-                <div className="text-[28px] shrink-0">📊</div>
-                <div className="flex-1">
-                  <div className="text-sm font-extrabold mb-1">Sponsored Listing</div>
-                  <div className="text-xs text-gray-500 leading-relaxed mb-3">Appear first in category search results. ₹999/week</div>
-                  {products.length > 0 ? (
-                    <div className="flex flex-col gap-2">
-                      <select id="sponsor-product" className="p-2 border border-gray-300 rounded text-xs outline-none focus:border-[#E65100]">
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      <button onClick={async () => {
-                        const sel = (document.getElementById('sponsor-product') as HTMLSelectElement)?.value;
-                        if (!sel) return;
-                        const until = new Date(Date.now() + 7 * 24 * 3600000).toISOString();
-                        const { error } = await supabase.from('products').update({ is_sponsored: true, sponsored_until: until }).eq('id', sel).eq('seller_id', user!.id);
-                        if (!error) toastSuccess('Sponsored listing activated for 7 days!');
-                        else toast('Failed to activate sponsorship: ' + error.message, 'error');
-                      }} className="bg-[#E65100] hover:bg-[#F57C00] text-white px-4 py-2 rounded text-xs font-bold transition-colors">Sponsor Now — ₹999/week</button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400">Add products first to sponsor them.</p>
-                  )}
-                </div>
+              <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                <div className="text-[13px] font-black text-gray-900 mb-3 flex items-center gap-2"><Eye size={16} className="text-[#E65100]" /> Featured Store</div>
+                <div className="text-[11px] text-gray-500 mb-3">Highlight your store on BYNDIO homepage for maximum visibility.</div>
+                {[{dur: 7, price: 999}, {dur: 30, price: 2999}, {dur: 90, price: 7499}].map(opt => (
+                  <button key={opt.dur} onClick={async () => {
+                    try {
+                      const session = await supabase.auth.getSession();
+                      const res = await fetch('/.netlify/functions/purchase-featured-store', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.data.session?.access_token}` },
+                        body: JSON.stringify({ duration: opt.dur, title: storeInfo.store_name, paymentId: 'DEMO-' + Date.now() })
+                      });
+                      const data = await res.json();
+                      if (res.ok) toastSuccess(`Store featured for ${opt.dur} days!`);
+                      else toast(data.error || 'Failed', 'error');
+                    } catch { toast('Service unavailable', 'error'); }
+                  }} className="w-full flex items-center justify-between p-2.5 border border-gray-100 rounded-lg mb-2 hover:bg-gray-50 transition-all text-left">
+                    <span className="text-[11px] font-bold">📍 {opt.dur} Days</span>
+                    <span className="text-[10px] font-black text-[#E65100]">₹{opt.price.toLocaleString('en-IN')}</span>
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="mt-4 bg-[#FFF3E0] border border-[#FFE0B2] rounded-lg p-4 text-[12px] text-[#E65100]">
-              💳 Boost charges are deducted from your seller wallet. Ensure sufficient balance before activating.
+            <div className="mt-4 bg-[#E3F2FD] border border-[#90CAF9] rounded-xl p-4 text-[11px] text-[#0D47A1] font-bold">
+              💡 Pro & Brand plan subscribers get free monthly boosts included. <button onClick={() => setTab('settings')} className="underline ml-1">Upgrade Plan →</button>
             </div>
           </>
         );

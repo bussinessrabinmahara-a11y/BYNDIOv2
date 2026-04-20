@@ -114,3 +114,109 @@ export interface ShortVideo {
   creator_name?: string;
   is_liked?: boolean;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B2C REVENUE MODEL TYPES
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price_monthly: number;
+  price_yearly?: number;
+  max_products: number;
+  max_images_per_product: number;
+  can_use_analytics: boolean;
+  can_use_ai_tools: boolean;
+  can_boost_products: boolean;
+  free_boosts_monthly: number;
+  commission_rate: number;
+  priority_support: boolean;
+  custom_store_page: boolean;
+  features: string[];
+  is_active: boolean;
+}
+
+export interface BoostPackage {
+  id: string;
+  name: string;
+  type: 'feed_boost' | 'product_boost' | 'search_ad' | 'category_boost';
+  duration_hours: number;
+  price: number;
+  impressions_guaranteed?: number;
+  description?: string;
+  is_active: boolean;
+}
+
+export interface ProductBoost {
+  id: string;
+  seller_id: string;
+  product_id: string;
+  boost_package_id?: string;
+  type: 'feed_boost' | 'product_boost' | 'search_ad' | 'category_boost';
+  status: 'active' | 'paused' | 'expired' | 'cancelled';
+  starts_at: string;
+  ends_at: string;
+  amount_paid: number;
+  impressions: number;
+  clicks: number;
+  payment_id?: string;
+  product?: { name: string; images?: string[] };
+}
+
+export interface PremiumBadge {
+  id: string;
+  seller_id: string;
+  badge_type: 'verified' | 'trusted' | 'premium' | 'brand_partner';
+  is_active: boolean;
+  purchased_at: string;
+  expires_at?: string;
+  amount_paid: number;
+}
+
+export interface FeaturedStore {
+  id: string;
+  seller_id: string;
+  title?: string;
+  description?: string;
+  banner_url?: string;
+  position: number;
+  is_active: boolean;
+  starts_at: string;
+  ends_at?: string;
+  amount_paid: number;
+  seller?: { business_name: string; business_state?: string };
+}
+
+export interface ProtectionPlan {
+  id: string;
+  name: string;
+  type: 'per_order' | 'monthly';
+  price: number;
+  coverage_pct: number;
+  max_claims?: number;
+  description?: string;
+  is_active: boolean;
+}
+
+export interface SellerProtection {
+  id: string;
+  seller_id: string;
+  plan_id: string;
+  status: 'active' | 'expired' | 'cancelled';
+  claims_used: number;
+  starts_at: string;
+  ends_at?: string;
+  amount_paid: number;
+  plan?: ProtectionPlan;
+}
+
+export interface PlatformRevenue {
+  id: string;
+  source: string;
+  amount: number;
+  user_id?: string;
+  reference_id?: string;
+  description?: string;
+  created_at: string;
+}
