@@ -1,14 +1,25 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Heart, ShoppingCart, Check, Star, Plus } from 'lucide-react';
+import { Heart, ShoppingCart, Check, Star, Plus, MapPin, AlertTriangle } from 'lucide-react';
 import { Product, useAppStore } from '../store';
+import { canSellerShipToState, getShippingBadge } from '../lib/gstCompliance';
+import { toast } from './Toast';
 
 export default function ProductCard({ product }: { product: Product }) {
-  const { addToCart, toggleWishlist, wishlist } = useAppStore();
+  const { addToCart, toggleWishlist, wishlist, buyerState } = useAppStore();
   const [justAdded, setJustAdded] = useState(false);
   const disc = Math.round((1 - product.price / product.mrp) * 100);
-  const isWishlisted = wishlist.includes(product.id);
+  const isWishlisted = (wishlist || []).includes(product.id);
+
+  // GST Compliance: Check if this product can ship to buyer's state
+  const gstCheck = canSellerShipToState(
+    product.seller_state,
+    product.seller_has_gst ?? false,
+    buyerState
+  );
+  const shippingBadge = getShippingBadge(product.seller_state, product.seller_has_gst ?? false);
+  const isRestricted = !gstCheck.allowed;
 
   const handleWishlist = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -19,6 +30,13 @@ export default function ProductCard({ product }: { product: Product }) {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // GST Compliance: Block add-to-cart for restricted items
+    if (isRestricted) {
+      toast(`⚠️ This seller ships within ${product.seller_state} only. Not available in ${buyerState}.`, 'error');
+      return;
+    }
+    
     addToCart(product);
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1800);
@@ -33,7 +51,7 @@ export default function ProductCard({ product }: { product: Product }) {
     >
       <Link
         to={`/product/${product.id}`}
-        className="bg-white border text-left border-gray-100 rounded-xl overflow-hidden flex flex-col h-full transition-all duration-300 hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
+        className={`bg-white border text-left border-gray-100 rounded-xl overflow-hidden flex flex-col h-full transition-all duration-300 hover:shadow-[0_10px_30px_rgba(0,0,0,0.08)] ${isRestricted ? 'opacity-60' : ''}`}
       >
         {/* Aspect Ratio Image Container */}
         <div className="aspect-square md:aspect-[3/4] bg-white relative overflow-hidden group/img">
@@ -61,15 +79,29 @@ export default function ProductCard({ product }: { product: Product }) {
             </div>
           )}
 
+          {/* GST Restriction Overlay */}
+          {isRestricted && (
+            <div className="absolute inset-0 bg-black/10 flex items-center justify-center z-20">
+              <div className="bg-white/95 backdrop-blur-sm rounded-lg px-2 py-1.5 shadow-md flex items-center gap-1 border border-orange-200">
+                <AlertTriangle size={10} className="text-orange-500 shrink-0" />
+                <span className="text-[7px] md:text-[8px] font-black text-orange-700 leading-tight">
+                  Only ships in {product.seller_state}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Desktop Floating Action - Premium Feel */}
-          <div className="hidden md:flex absolute inset-0 bg-black/5 opacity-0 group-hover/img:opacity-100 transition-opacity items-center justify-center gap-2">
-             <button
-                onClick={handleAddToCart}
-                className="w-10 h-10 rounded-full bg-white text-[#0D47A1] shadow-xl flex items-center justify-center hover:bg-[#0D47A1] hover:text-white transition-all transform translate-y-4 group-hover/img:translate-y-0 duration-300"
-              >
-                {justAdded ? <Check size={18} /> : <ShoppingCart size={18} />}
-             </button>
-          </div>
+          {!isRestricted && (
+            <div className="hidden md:flex absolute inset-0 bg-black/5 opacity-0 group-hover/img:opacity-100 transition-opacity items-center justify-center gap-2">
+               <button
+                  onClick={handleAddToCart}
+                  className="w-10 h-10 rounded-full bg-white text-[#0D47A1] shadow-xl flex items-center justify-center hover:bg-[#0D47A1] hover:text-white transition-all transform translate-y-4 group-hover/img:translate-y-0 duration-300"
+                >
+                  {justAdded ? <Check size={18} /> : <ShoppingCart size={18} />}
+               </button>
+            </div>
+          )}
 
           {/* Wishlist Button */}
           <button
@@ -105,6 +137,19 @@ export default function ProductCard({ product }: { product: Product }) {
             {product.name}
           </h3>
 
+          {/* GST Shipping Badge */}
+          {product.seller_state && (
+            <div className={`flex items-center gap-0.5 mb-1 ${
+              shippingBadge.type === 'pan-india' ? 'text-green-600' : 
+              shippingBadge.type === 'state-only' ? 'text-orange-500' : 'text-gray-400'
+            }`}>
+              <MapPin size={7} className="shrink-0" />
+              <span className="text-[6px] md:text-[7px] font-black uppercase tracking-wider leading-none truncate">
+                {shippingBadge.text}
+              </span>
+            </div>
+          )}
+
           <div className="mt-auto flex flex-col md:flex-row md:items-end md:justify-between gap-1 md:gap-0">
             <div className="flex flex-col">
               <div className="flex items-baseline gap-1">
@@ -116,7 +161,9 @@ export default function ProductCard({ product }: { product: Product }) {
             <button
               onClick={handleAddToCart}
               className={`transition-all duration-300 flex items-center justify-center ${
-                justAdded
+                isRestricted
+                  ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                  : justAdded
                   ? 'bg-[#388E3C] text-white border-[#388E3C]'
                   : 'bg-white hover:bg-gray-50 text-[#0D47A1] border border-gray-100 shadow-sm'
               } ${
@@ -124,8 +171,12 @@ export default function ProductCard({ product }: { product: Product }) {
                 'w-full py-1 rounded-md md:w-7 md:h-7 md:rounded-full text-[10px]'
               }`}
             >
-              <span className="md:hidden font-black tracking-widest">{justAdded ? 'ADDED' : 'ADD'}</span>
-              <span className="hidden md:block">{justAdded ? <Check size={14} /> : <Plus size={16} />}</span>
+              <span className="md:hidden font-black tracking-widest">
+                {isRestricted ? 'UNAVAILABLE' : justAdded ? 'ADDED' : 'ADD'}
+              </span>
+              <span className="hidden md:block">
+                {isRestricted ? <AlertTriangle size={12} /> : justAdded ? <Check size={14} /> : <Plus size={16} />}
+              </span>
             </button>
           </div>
         </div>

@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, BarChart2, Users, Package, Tag, Star, DollarSign, Building2, Settings,
   Save, Edit, Trash2, LayoutTemplate, PlusCircle, RefreshCw, Bell, Mail, Shield,
   TrendingUp, CheckCircle, XCircle, Search, ChevronDown, ChevronUp, Eye, EyeOff,
   Download, Upload, Zap, MessageSquare, Gift, Award, Globe, Lock,
   Activity, ArrowUpRight, ArrowDownRight, Truck, CreditCard, RotateCcw,
-  UserCheck, AlertTriangle, Menu, X, ExternalLink, ChevronRight
+  UserCheck, AlertTriangle, Menu, X, ExternalLink, ChevronRight, Plus, Edit3, Loader2, Camera, Briefcase
 } from 'lucide-react';
 import { toast, toastSuccess } from '../components/Toast';
 import { useAppStore } from '../store';
@@ -1020,6 +1021,286 @@ function UserManager() {
 }
 
 // ================================================================
+// PAYMENT MANAGER
+// ================================================================
+function PaymentManager() {
+  const [methods, setMethods] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [imgUploading, setImgUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const initialMethod = { 
+    name: '', description: '', icon: 'CreditCard', provider: 'manual', is_active: true,
+    config: { bank_name: '', account_no: '', ifsc: '', upi_id: '', qr_url: '', instructions: '' }
+  };
+  
+  const [form, setForm] = useState(initialMethod);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('payment_methods').select('*').order('created_at', { ascending: true });
+    if (error) toast('Load error: ' + error.message, 'error');
+    if (data) setMethods(data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = async (id: string, current: boolean) => {
+    const { error } = await supabase.from('payment_methods').update({ is_active: !current }).eq('id', id);
+    if (error) { toast('Update failed: ' + error.message, 'error'); return; }
+    setMethods(m => m.map(item => item.id === id ? { ...item, is_active: !current } : item));
+    toastSuccess(current ? 'Disabled' : 'Enabled');
+  };
+
+  const uploadQR = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setImgUploading(true);
+    const path = `payments/qr-${Date.now()}-${file.name}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file);
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(path);
+      setForm(p => ({ ...p, config: { ...p.config, qr_url: publicUrl } }));
+      toastSuccess('QR Code uploaded');
+    } else {
+      toast('Upload failed: ' + error.message, 'error');
+    }
+    setImgUploading(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name) { toast('Name is required', 'error'); return; }
+    setIsSaving(true);
+    try {
+      if (editingId) {
+        const { error } = await supabase.from('payment_methods').update(form).eq('id', editingId);
+        if (error) throw error;
+        toastSuccess('Updated successfully');
+      } else {
+        const { error } = await supabase.from('payment_methods').insert(form);
+        if (error) throw error;
+        toastSuccess('Payment method added');
+      }
+      setEditingId(null);
+      setShowAdd(false);
+      setForm(initialMethod);
+      load();
+    } catch (err: any) {
+      toast('Operation failed: ' + err.message, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to remove this payment method? This cannot be undone.')) return;
+    const { error } = await supabase.from('payment_methods').delete().eq('id', id);
+    if (error) { toast('Delete failed: ' + error.message, 'error'); return; }
+    setMethods(m => m.filter(item => item.id !== id));
+    toastSuccess('Deleted permanently');
+  };
+
+  const startEdit = (m: any) => {
+    setEditingId(m.id);
+    setForm({ 
+      name: m.name, description: m.description || '', icon: m.icon || 'CreditCard', provider: m.provider, is_active: m.is_active,
+      config: { ...initialMethod.config, ...m.config }
+    });
+    setShowAdd(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight">Payment Gateways</h2>
+          <p className="text-[13px] text-gray-500 font-medium">Control how your customers pay you</p>
+        </div>
+        <button onClick={() => { setShowAdd(!showAdd); if (editingId) {setEditingId(null); setForm(initialMethod);} }} 
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[13px] font-black shadow-lg transition-all active:scale-95 ${showAdd ? 'bg-white text-red-500 border border-red-100' : 'bg-black text-white hover:bg-gray-800'}`}>
+          {showAdd ? 'Cancel' : <><Plus size={16} /> Add New Method</>}
+        </button>
+      </div>
+
+      {showAdd && (
+        <motion.form initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} onSubmit={handleSubmit} 
+          className="bg-white p-8 rounded-[32px] shadow-2xl border border-gray-100 mb-10 space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 to-indigo-600" />
+          
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-gray-900 text-lg flex items-center gap-2">
+              {editingId ? <Edit3 size={20} className="text-blue-600" /> : <Package size={20} className="text-blue-600" />}
+              {editingId ? 'Edit Gateway Configuration' : 'Create New Payment Option'}
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Display Name</label>
+              <input placeholder="e.g. Bank Transfer (HDFC)" required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                className="w-full p-4 bg-gray-50 border border-transparent rounded-2xl text-[14px] font-bold outline-none focus:bg-white focus:border-blue-500 transition-all" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">System Provider</label>
+              <select value={form.provider} onChange={e => setForm(p => ({ ...p, provider: e.target.value }))}
+                className="w-full p-4 bg-gray-50 border border-transparent rounded-2xl text-[14px] font-bold outline-none focus:bg-white focus:border-blue-500 appearance-none transition-all">
+                <option value="manual">Manual (Bank Details / QR)</option>
+                <option value="razorpay">Razorpay (Cards/UPI/NB)</option>
+                <option value="cod">Cash on Delivery</option>
+                <option value="wallet">Internal Wallet</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-blue-50/50 p-6 rounded-[24px] space-y-4 border border-blue-100">
+             <div className="flex items-center gap-2 mb-2">
+               <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-[10px] font-black">2</div>
+               <div className="text-[11px] font-black text-blue-900 uppercase tracking-widest">Gateway Configuration Details</div>
+             </div>
+             
+             {form.provider === 'manual' ? (
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-blue-400 uppercase ml-1">Bank Name</label>
+                    <input placeholder="Ex: HDFC Bank" value={form.config.bank_name} onChange={e => setForm(p => ({ ...p, config: { ...p.config, bank_name: e.target.value } }))}
+                      className="w-full p-3 bg-white border border-blue-100 rounded-xl text-[13px] font-semibold outline-none focus:border-blue-500" />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-blue-400 uppercase ml-1">Account Number</label>
+                    <input placeholder="Ex: 50100234..." value={form.config.account_no} onChange={e => setForm(p => ({ ...p, config: { ...p.config, account_no: e.target.value } }))}
+                      className="w-full p-3 bg-white border border-blue-100 rounded-xl text-[13px] font-semibold outline-none focus:border-blue-500" />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-blue-400 uppercase ml-1">IFSC Code</label>
+                    <input placeholder="Ex: HDFC0001..." value={form.config.ifsc} onChange={e => setForm(p => ({ ...p, config: { ...p.config, ifsc: e.target.value } }))}
+                      className="w-full p-3 bg-white border border-blue-100 rounded-xl text-[13px] font-semibold outline-none focus:border-blue-500" />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-blue-400 uppercase ml-1">UPI ID</label>
+                    <input placeholder="Ex: brand@okaxis" value={form.config.upi_id} onChange={e => setForm(p => ({ ...p, config: { ...p.config, upi_id: e.target.value } }))}
+                      className="w-full p-3 bg-white border border-blue-100 rounded-xl text-[13px] font-semibold outline-none focus:border-blue-500" />
+                 </div>
+                 <div className="flex flex-col space-y-1.5 md:col-span-2">
+                    <label className="text-[10px] font-bold text-blue-400 uppercase ml-1">QR Code Payment</label>
+                    <div className="flex gap-2">
+                      <input placeholder="QR URL or upload below" value={form.config.qr_url} onChange={e => setForm(p => ({ ...p, config: { ...p.config, qr_url: e.target.value } }))}
+                        className="flex-1 p-3 bg-white border border-blue-100 rounded-xl text-[13px] font-semibold outline-none focus:border-blue-500" />
+                      <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl text-[11px] font-black transition-all flex items-center gap-2 shrink-0">
+                        {imgUploading ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                        QR
+                        <input type="file" accept="image/*" className="hidden" onChange={uploadQR} />
+                      </label>
+                    </div>
+                 </div>
+               </div>
+             ) : (
+               <div className="p-10 text-center bg-white/50 rounded-2xl border-2 border-dashed border-blue-100 text-blue-400 text-[13px] font-bold">
+                 {form.provider === 'razorpay' ? 'Configuration for Razorpay is handled via environment variables.' : 'This provider does not require additional configuration.'}
+               </div>
+             )}
+             
+             <div className="space-y-1.5 pt-2">
+               <label className="text-[10px] font-bold text-blue-400 uppercase ml-1">Instructions for Customer</label>
+               <textarea placeholder="Tell customers what to do after paying (Ex: 'Send screenshot to WhatsApp')" value={form.config.instructions} onChange={e => setForm(p => ({ ...p, config: { ...p.config, instructions: e.target.value } }))}
+                 className="w-full p-4 bg-white border border-blue-100 rounded-2xl text-[13px] font-semibold outline-none focus:border-blue-500 min-h-[100px]" />
+             </div>
+          </div>
+
+          <div className="flex gap-3">
+             <button type="submit" disabled={isSaving} className="flex-1 bg-black text-white font-black py-4 rounded-2xl text-[15px] hover:bg-gray-800 transition-all shadow-xl disabled:opacity-50 flex items-center justify-center gap-2">
+               {isSaving ? <Loader2 size={18} className="animate-spin" /> : editingId ? <Save size={18} /> : <CheckCircle size={18} />}
+               {editingId ? 'Save Changes' : 'Create Gateway'}
+             </button>
+             {editingId && (
+               <button type="button" onClick={() => { setEditingId(null); setForm(initialMethod); setShowAdd(false); }} className="px-8 bg-gray-100 text-gray-500 font-black py-4 rounded-2xl text-[15px] hover:bg-gray-200 transition-all">
+                 Discard
+               </button>
+             )}
+          </div>
+        </motion.form>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading ? Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="bg-white h-64 rounded-[32px] animate-pulse border border-gray-100 shadow-sm" />
+        )) : methods.length === 0 ? (
+          <div className="p-20 text-center col-span-full bg-white rounded-[40px] text-gray-400 border-4 border-dashed border-gray-50">
+             <div className="text-4xl mb-4">💳</div>
+             <div className="font-black text-gray-900 mb-1">No Gateways Active</div>
+             <p className="text-[13px] font-medium">Add a payment method to start accepting orders.</p>
+          </div>
+        ) : methods.map(m => (
+          <div key={m.id} className={`bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 hover:shadow-2xl transition-all group relative ${!m.is_active && 'opacity-60 grayscale'}`}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform shadow-inner">
+                {m.provider === 'cod' ? '🚚' : m.provider === 'razorpay' ? '💳' : m.provider === 'wallet' ? '💰' : '🏦'}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => startEdit(m)} className="p-2.5 text-gray-400 hover:text-black hover:bg-gray-50 rounded-xl transition-all shadow-sm">
+                  <Edit3 size={16} />
+                </button>
+                <button onClick={() => toggle(m.id, m.is_active)}
+                  className={`text-[9px] font-black px-3 py-1.5 rounded-full transition-all border shadow-sm ${m.is_active ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                  {m.is_active ? '● LIVE' : '○ OFF'}
+                </button>
+              </div>
+            </div>
+
+            <div className="font-black text-[18px] text-gray-900 mb-1 leading-tight">{m.name}</div>
+            <div className="text-[11px] font-black text-blue-600 uppercase tracking-widest mb-4 opacity-70">{m.provider}</div>
+            
+            {/* Detailed Preview Section */}
+            <div className="bg-gray-50/50 rounded-2xl p-4 border border-gray-50 space-y-2 mb-6">
+               {m.config?.bank_name ? (
+                 <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-blue-600 shadow-sm shrink-0">
+                      <Briefcase size={14} />
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-black text-gray-900 uppercase tracking-tight">{m.config.bank_name}</div>
+                      <div className="text-[10px] font-bold text-gray-400 tracking-wider">A/C: {m.config.account_no}</div>
+                    </div>
+                 </div>
+               ) : (
+                 <div className="text-[10px] text-gray-300 font-bold italic py-2">Standard Automated gateway</div>
+               )}
+               
+               {m.config?.upi_id && (
+                 <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[#1565C0] shadow-sm shrink-0 font-black text-[10px]">UPI</div>
+                    <div className="text-[11px] font-black text-blue-900 truncate">{m.config.upi_id}</div>
+                 </div>
+               )}
+
+               {m.config?.qr_url && (
+                 <div className="flex items-center gap-2 pt-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full" />
+                    <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">QR CODE ENABLED</span>
+                 </div>
+               )}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-gray-50">
+              <div className="flex -space-x-2">
+                 <div className="w-6 h-6 rounded-full bg-blue-100 border-2 border-white flex items-center justify-center text-[8px] font-black text-blue-600">S</div>
+                 <div className="w-6 h-6 rounded-full bg-green-100 border-2 border-white flex items-center justify-center text-[8px] font-black text-green-600">A</div>
+              </div>
+              <button onClick={() => handleDelete(m.id)} className="flex items-center gap-2 text-gray-300 hover:text-red-500 transition-all font-black text-[10px] uppercase tracking-widest p-1">
+                <Trash2 size={14} /> Remove
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ================================================================
 // EMAIL BLASTER — Send any email to any user
 // ================================================================
 function EmailManager() {
@@ -1736,7 +2017,23 @@ function KYCReviewPanel() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
 
-  useEffect(() => { fetchKYCs(); }, [filter]);
+  useEffect(() => { 
+    fetchKYCs(); 
+
+    // REAL-TIME: Listen for KYC submissions
+    const channel = supabase.channel('kyc-review-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, () => {
+        fetchKYCs();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'kyc_submissions' }, () => {
+        fetchKYCs();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [filter]);
 
   const fetchKYCs = async () => {
     setLoading(true);
@@ -1830,12 +2127,32 @@ function KYCReviewPanel() {
                         </div>
                         <div>
                           <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">GST Number</div>
-                          <div className="text-xs font-bold text-gray-900">{s.gst_number || 'NOT PROVIDED'}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-xs font-bold text-gray-900">{s.gst_number || 'NOT PROVIDED'}</div>
+                            {!s.gst_number && (
+                              <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter border border-amber-200">
+                                Intra-State Only
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="col-span-2">
                           <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Business Address</div>
                           <div className="text-xs font-bold text-gray-600 leading-tight">{s.business_address || '—'}</div>
                         </div>
+                        {s.kyc_documents && s.kyc_documents.length > 0 && (
+                          <div className="col-span-2 pt-2 border-t border-gray-100 mt-1">
+                            <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Verification Documents</div>
+                            <div className="flex flex-wrap gap-2">
+                              {s.kyc_documents.map((url: string, idx: number) => (
+                                <a key={idx} href={url} target="_blank" rel="noopener noreferrer" 
+                                  className="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold rounded border border-blue-100 hover:bg-blue-100 transition-colors flex items-center gap-1">
+                                  <ExternalLink size={10} /> Document {idx + 1}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2201,7 +2518,30 @@ function ApplicationsPanel() {
     setLoading(false);
   }, [tab]);
 
-  useEffect(() => { load(); }, [load]);
+  // Expose load function for realtime updates
+  const loadApps = load;
+
+  useEffect(() => { 
+    load(); 
+
+    // REAL-TIME: Listen for new applications
+    const channel = supabase.channel('apps-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'seller_applications' }, () => {
+        load();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'influencer_applications' }, () => {
+        load();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'affiliate_applications' }, () => {
+        load();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [load]);
+
 
   const updateStatus = async (app: any, status: string) => {
     try {
@@ -2229,18 +2569,22 @@ function ApplicationsPanel() {
               category: app.category,
               pan_number: app.pan_number,
               gst_number: app.gst_number,
+              business_state: app.business_state || app.state, // Map from application
               bank_account_number: app.bank_account,
               ifsc_code: app.ifsc_code,
-              kyc_status: 'submitted', // Data is already there from application
-              is_verified: false
+              kyc_documents: app.kyc_documents || [],
+              kyc_status: 'approved', 
+              is_verified: true
             });
           } else if (tab === 'influencer') {
             await supabase.from('influencers').upsert({
               id: userId,
-              social_media_links: { instagram: app.instagram_handle, youtube: app.youtube_channel },
-              total_followers: parseInt(app.followers_count) || 0,
-              is_verified: true
+              social_media_links: app.social_links || {},
+              is_verified: true, // PHASE 1: Auto-verify on approval
+              commission_rate: 10.00 // Default commission for influencers
             });
+            // Also ensure they have a wallet
+            await supabase.from('wallets').upsert({ user_id: userId, balance: 0 }, { onConflict: 'user_id' });
           }
         }
       }
@@ -2288,6 +2632,15 @@ function ApplicationsPanel() {
                           <>
                             <div className="font-bold">{a.business_name}</div>
                             <div className="text-[10px] text-gray-400">{a.gst_number ? `GST: ${a.gst_number}` : 'No GST (Local Only)'}</div>
+                            {a.kyc_documents && a.kyc_documents.length > 0 && (
+                              <div className="flex gap-1.5 mt-1">
+                                {a.kyc_documents.map((url: string, idx: number) => (
+                                  <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="text-[9px] font-bold text-blue-600 hover:underline flex items-center gap-0.5">
+                                    <ExternalLink size={8} /> Doc {idx + 1}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                           </>
                         ) : tab === 'influencer' ? (
                           <>
@@ -2691,6 +3044,96 @@ function SecurityPanel() {
   );
 }
 
+function CompliancePanel() {
+  const [summary, setSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSummary();
+  }, []);
+
+  const fetchSummary = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc('get_gst_compliance_summary');
+    if (data) setSummary(data);
+    if (error) toast('Compliance error: ' + error.message, 'error');
+    setLoading(false);
+  };
+
+  if (loading) return <div className="p-10 text-center text-gray-400">Loading compliance data...</div>;
+  if (!summary) return <div className="p-10 text-center text-gray-400">No compliance data available.</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-black text-[#0D47A1]">🛡️ GST Compliance Monitor</h2>
+        <button onClick={fetchSummary} className="p-2 text-gray-400 hover:text-[#0D47A1] hover:bg-gray-100 rounded-lg">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Sellers', val: summary.total_sellers, icon: Users, color: 'text-gray-900' },
+          { label: 'GST Registered', val: summary.gst_registered, icon: CheckCircle, color: 'text-green-600' },
+          { label: 'Non-GST (Local Only)', val: summary.non_gst, icon: AlertTriangle, color: 'text-orange-600' },
+          { label: 'Compliance Rate', val: `${summary.compliance_rate}%`, icon: Shield, color: 'text-[#0D47A1]' },
+        ].map((s, i) => (
+          <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{s.label}</span>
+              <s.icon size={16} className={s.color} />
+            </div>
+            <div className={`text-2xl font-black ${s.color}`}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="font-black text-[15px]">State-wise Distribution</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px]">
+            <thead className="bg-gray-50 text-[11px] font-bold text-gray-400 uppercase">
+              <tr>
+                <th className="px-5 py-3">State</th>
+                <th className="px-5 py-3">Total Sellers</th>
+                <th className="px-5 py-3">With GST</th>
+                <th className="px-5 py-3">Without GST</th>
+                <th className="px-5 py-3">Coverage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.by_state.map((row: any) => (
+                <tr key={row.state} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+                  <td className="px-5 py-4 font-bold">{row.state}</td>
+                  <td className="px-5 py-4">{row.total}</td>
+                  <td className="px-5 py-4 text-green-600 font-bold">{row.with_gst}</td>
+                  <td className="px-5 py-4 text-orange-600 font-bold">{row.without_gst}</td>
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-600 rounded-full" 
+                          style={{ width: `${(row.with_gst / row.total) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold text-gray-500">
+                        {Math.round((row.with_gst / row.total) * 100)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   usePageTitle('Admin Panel');
   const { user } = useAppStore();
@@ -2717,6 +3160,24 @@ export default function Admin() {
 
   useEffect(() => {
     refreshAll();
+    
+    // GLOBAL REAL-TIME: Listen for notifications across all admin tabs
+    const channel = supabase.channel('admin-global-alerts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'seller_applications' }, (payload) => {
+        toastSuccess(`🆕 New Seller Application: ${payload.new.business_name}`);
+        refreshAll();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sellers' }, (payload) => {
+        if (payload.new.kyc_status === 'submitted') {
+          toastSuccess(`📝 New KYC Submission: ${payload.new.business_name}`);
+          refreshAll();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [refreshAll]);
 
   const navSections = [
@@ -2741,6 +3202,7 @@ export default function Admin() {
         { id: 'orders', icon: ShoppingBag, label: 'Orders', badge: pendingCount },
         { id: 'shipping', icon: Truck, label: 'Shipping', badge: pendingCount },
         { id: 'payouts', icon: DollarSign, label: 'Payouts', badge: 0 },
+        { id: 'payments', icon: CreditCard, label: 'Payment Methods', badge: 0 },
         { id: 'kyc', icon: UserCheck, label: 'KYC Review', badge: kycCount },
         { id: 'returns', icon: RotateCcw, label: 'Returns', badge: returnCount },
       ]
@@ -2765,6 +3227,7 @@ export default function Admin() {
       items: [
         { id: 'settings', icon: Globe, label: 'Site Settings', badge: 0 },
         { id: 'security', icon: Activity, label: 'Fraud Monitoring', badge: 0 },
+        { id: 'compliance', icon: Shield, label: 'GST Compliance', badge: 0 },
       ]
     },
   ];
@@ -2778,6 +3241,7 @@ export default function Admin() {
       case 'products': return <ProductManager />;
       case 'flash_sales': return <FlashSalesPanel />;
       case 'coupons': return <CouponManager />;
+      case 'payments': return <PaymentManager />;
       case 'orders': return <OrderManager />;
       case 'shipping': return <ShippingPanel />;
       case 'payouts': return <PayoutsPanel />;
@@ -2790,6 +3254,7 @@ export default function Admin() {
       case 'notify': return <NotificationManager />;
       case 'settings': return <SiteSettingsManager />;
       case 'security': return <SecurityPanel />;
+      case 'compliance': return <CompliancePanel />;
       default: return <OverviewPanel />;
     }
   };
@@ -2920,7 +3385,11 @@ export default function Admin() {
             <button onClick={() => setTab('notify')}
               className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
               <Bell size={17} />
+              {(kycCount > 0 || pendingCount > 0) && (
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 border-2 border-white rounded-full" />
+              )}
             </button>
+
             <button onClick={refreshAll} title="Sync Live Data"
               className="p-2 text-gray-400 hover:text-[#0D47A1] hover:bg-blue-50 rounded-lg transition-colors">
               <RefreshCw size={17} />

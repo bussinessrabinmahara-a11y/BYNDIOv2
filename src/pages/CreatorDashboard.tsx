@@ -6,7 +6,6 @@ import VideoFeed from '../components/VideoFeed';
 import { ShortVideo } from '../types';
 import { useAppStore } from '../store';
 import { supabase } from '../lib/supabase';
-import { initiateSubscriptionPayment } from '../lib/subscriptionPayment';
 import { toast, toastSuccess } from '../components/Toast';
 
 // Promo Code Generator Component
@@ -585,35 +584,99 @@ export default function CreatorDashboard() {
             </div>
 
             <div className="bg-white rounded-[10px] p-5 shadow-sm">
-              <div className="text-[14px] font-black mb-3">Partner Program Plans</div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {[
-                  { name: 'Basic Partner', price: '₹499/mo', features: ['8% commission', 'Up to 50 links', 'Email support', 'Monthly payout'], color: 'border-gray-200' },
-                  { name: 'Gold Partner', price: '₹1,999/mo', features: ['10% commission', 'Up to 200 links', 'Priority support', 'Weekly payout', 'Full Analytics'], color: 'border-[#0D47A1]', popular: true },
-                  { name: 'Premium Partner', price: '₹4,999/mo', features: ['12% commission', 'Unlimited links', 'Dedicated manager', 'Daily payout', 'Priority campaigns'], color: 'border-gray-200' },
-                ].map((plan, i) => (
-                  <div key={i} className={`border-2 ${plan.color} rounded-xl p-4 relative`}>
-                    {plan.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0D47A1] text-white text-[10px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap">★ Popular</div>}
-                    <div className="font-black text-[15px] mb-0.5">{plan.name}</div>
-                    <div className="text-[22px] font-black text-[#0D47A1] mb-3">{plan.price}</div>
-                    {plan.features.map(f => <div key={f} className="text-[12px] text-gray-600 flex items-center gap-1.5 mb-1"><span className="text-[#388E3C] font-black">✓</span>{f}</div>)}
-                    <button
-                      disabled={user?.subscription_plan === plan.name.toLowerCase().replace(' partner', '')}
-                      onClick={() => {
-                        const prices: Record<string, number> = { 'Basic Partner': 499, 'Gold Partner': 1999, 'Premium Partner': 4999 };
-                        const commissions: Record<string, number> = { 'Basic Partner': 8, 'Gold Partner': 10, 'Premium Partner': 12 };
-                        initiateSubscriptionPayment(
-                          { name: plan.name, price: prices[plan.name] || 499, priceDisplay: plan.price, role: 'influencer', commissionRate: commissions[plan.name] },
-                          { id: user!.id, name: user!.name, email: user!.email },
-                          (planName) => { toastSuccess(`🎉 ${planName} plan activated! Your commission rate has been updated.`); },
-                          (msg) => { toast(msg, 'error'); },
-                        );
-                      }}
-                      className="w-full mt-3 bg-[#0D47A1] hover:bg-[#1565C0] disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-2 rounded-md text-[12px] font-bold transition-colors">
-                      {user?.subscription_plan === plan.name.toLowerCase().replace(' partner', '') ? '✓ Current Plan' : 'Get ' + plan.name.split(' ')[0]}
-                    </button>
+              <div className="flex items-center justify-between mb-4">
+                 <div>
+                   <div className="text-[14px] font-black">Creator Growth Roadmap</div>
+                   <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">BYNDIO Influencer Revenue Model</div>
+                 </div>
+                 <div className="bg-[#F3E5F5] text-[#7B1FA2] text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">
+                   Current: Phase 1
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* PHASE 1 */}
+                <div className="border-2 border-[#7B1FA2] rounded-xl p-4 relative bg-[#F3E5F5]/30">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#7B1FA2] text-white text-[10px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap shadow-sm">
+                    🚀 ACTIVE NOW
                   </div>
-                ))}
+                  <div className="font-black text-[15px] mb-0.5 text-[#4A148C]">Phase 1: Growth</div>
+                  <div className="text-[10px] text-gray-500 font-medium mb-3">0 → 1,000 Influencers</div>
+                  <div className="space-y-2 mb-4 border-t border-[#7B1FA2]/20 pt-3">
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Influencer Commission</span>
+                       <span className="font-black text-[#388E3C]">10–20%</span>
+                     </div>
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Brand Collab Fee</span>
+                       <span className="font-black text-[#0D47A1]">5–10%</span>
+                     </div>
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Subscription Fee</span>
+                       <span className="font-black text-[#7B1FA2]">₹0 (Free Forever)</span>
+                     </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Benefits</div>
+                    <div className="text-[11px] text-gray-600 flex items-center gap-1.5"><span className="text-[#388E3C] font-black">✓</span>Free Storefront</div>
+                    <div className="text-[11px] text-gray-600 flex items-center gap-1.5"><span className="text-[#388E3C] font-black">✓</span>Free Verified Badge</div>
+                    <div className="text-[11px] text-gray-600 flex items-center gap-1.5"><span className="text-[#388E3C] font-black">✓</span>Free Visibility Boost</div>
+                  </div>
+                </div>
+
+                {/* PHASE 2 */}
+                <div className="border border-gray-200 rounded-xl p-4 opacity-75 hover:opacity-100 transition-opacity">
+                  <div className="font-black text-[15px] mb-0.5 text-gray-800">Phase 2: Monetize</div>
+                  <div className="text-[10px] text-gray-500 font-medium mb-3">1,000 → 10K Influencers</div>
+                  <div className="space-y-2 mb-4 border-t border-gray-100 pt-3">
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Live Commerce</span>
+                       <span className="font-black text-gray-800">5–10%</span>
+                     </div>
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Brand Collab Fee</span>
+                       <span className="font-black text-gray-800">10–20%</span>
+                     </div>
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Paid Promotions</span>
+                       <span className="font-black text-gray-800">CPC/CPM</span>
+                     </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Future Features</div>
+                    <div className="text-[11px] text-gray-600 flex items-center gap-1.5"><span className="text-gray-400 font-black">⚡</span>Featured Storefront Fee</div>
+                    <div className="text-[11px] text-gray-600 flex items-center gap-1.5"><span className="text-gray-400 font-black">⚡</span>Balanced Monetization</div>
+                  </div>
+                </div>
+
+                {/* PHASE 3 */}
+                <div className="border border-gray-200 rounded-xl p-4 opacity-50 hover:opacity-100 transition-opacity relative overflow-hidden">
+                  <div className="font-black text-[15px] mb-0.5 text-gray-800">Phase 3: Scale</div>
+                  <div className="text-[10px] text-gray-500 font-medium mb-3">10K+ Influencers</div>
+                  <div className="space-y-2 mb-4 border-t border-gray-100 pt-3">
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Exclusive Drops</span>
+                       <span className="font-black text-gray-800">10–25%</span>
+                     </div>
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Referral Income</span>
+                       <span className="font-black text-gray-800">Active</span>
+                     </div>
+                     <div className="flex justify-between items-start text-[11px]">
+                       <span className="text-gray-600 font-medium">Verified Badge</span>
+                       <span className="font-black text-gray-800">₹199–₹999</span>
+                     </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Ecosystem</div>
+                    <div className="text-[11px] text-gray-600 flex items-center gap-1.5"><span className="text-gray-400 font-black">👑</span>Premium Subscriptions</div>
+                    <div className="text-[11px] text-gray-600 flex items-center gap-1.5"><span className="text-gray-400 font-black">🎯</span>Ads Ecosystem</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                <p className="text-[12px] font-bold text-gray-800 italic">“First help creators earn → then grow → then monetize.”</p>
               </div>
             </div>
           </>

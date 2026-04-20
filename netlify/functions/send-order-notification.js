@@ -12,7 +12,7 @@ exports.handler = async (event) => {
     const recipientEmail = userEmail || buyerEmail;
     const recipientName = userName || buyerName || 'Customer';
     const apiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.FROM_EMAIL || 'orders@byndio.in';
+    const fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
 
     if (!apiKey) {
       console.warn('[send-order-notification] RESEND_API_KEY not configured — skipping email');
@@ -79,8 +79,8 @@ exports.handler = async (event) => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: fromEmail,
-        to: recipientEmail,
+        from: `BYNDIO <${fromEmail}>`,
+        to: [recipientEmail],
         subject: `Order Confirmed — #${orderId?.slice(0, 8).toUpperCase() || 'N/A'} | BYNDIO`,
         html: emailHtml
       })

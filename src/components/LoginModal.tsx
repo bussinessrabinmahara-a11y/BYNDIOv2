@@ -329,7 +329,7 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           </div>
         )}
 
-        <div className="p-5 flex flex-col gap-3 max-h-[calc(90vh-140px)] overflow-y-auto custom-scrollbar">
+        <div className="p-4 md:p-5 flex flex-col gap-3 max-h-[calc(95vh-100px)] overflow-y-auto custom-scrollbar">
 
           {/* OTP LOGIN SCREEN */}
           {authMode === 'otp' && (
@@ -468,8 +468,8 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
                       <div className="grid grid-cols-3 gap-2">
                         {([{ val: 'buyer', icon: '🛒', label: 'Buyer' }, { val: 'seller', icon: '🏪', label: 'Seller' }, { val: 'influencer', icon: '⭐', label: 'Creator' }] as const).map(r => (
                           <button key={r.val} type="button" onClick={() => setRole(r.val)}
-                            className={`py-2.5 rounded-md text-[12px] font-bold transition-colors border-2 flex flex-col items-center gap-1 ${role === r.val ? 'border-[#0D47A1] bg-[#E3F2FD] text-[#0D47A1]' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                            <span className="text-lg">{r.icon}</span>{r.label}
+                            className={`py-3 rounded-md text-[12px] md:text-[13px] font-bold transition-colors border-2 flex flex-col items-center gap-1.5 ${role === r.val ? 'border-[#0D47A1] bg-[#E3F2FD] text-[#0D47A1]' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                            <span className="text-xl md:text-2xl">{r.icon}</span>{r.label}
                           </button>
                         ))}
                       </div>

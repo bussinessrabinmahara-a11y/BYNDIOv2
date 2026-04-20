@@ -15,13 +15,17 @@ export default function MobileBottomNav() {
     { href: '/profile', label: 'Profile', icon: User },
   ];
 
+  if (loc.pathname.startsWith('/product/') || loc.pathname.startsWith('/checkout')) {
+    return null;
+  }
+
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 flex justify-around items-center px-0 pb-[env(safe-area-inset-bottom)] z-[100] h-[48px] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 flex items-center px-0 pb-[env(safe-area-inset-bottom)] z-[100] h-[56px] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
       {navItems.map((item) => {
         const isActive = loc.pathname === item.href || (item.href === '/products' && loc.pathname.includes('/product'));
         const Icon = item.icon;
         return (
-          <Link key={item.href} to={item.href} className={`flex flex-col items-center justify-center w-full h-full gap-0 transition-all ${isActive ? 'text-[#0D47A1]' : 'text-slate-400 hover:text-slate-900'}`}>
+          <Link key={item.href} to={item.href} className={`flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all ${isActive ? 'text-[#0D47A1]' : 'text-slate-400 hover:text-slate-900'}`}>
             <div className="relative flex items-center justify-center">
               <Icon size={18} className={isActive ? 'stroke-[2.5]' : 'stroke-[2]'} />
               {!!item.badge && item.badge > 0 && (
@@ -30,7 +34,7 @@ export default function MobileBottomNav() {
                 </span>
               )}
             </div>
-            <span className={`text-[8px] tracking-tighter ${isActive ? 'font-black' : 'font-bold'} uppercase mt-0.5`}>{item.label}</span>
+            <span className={`text-[10px] tracking-tight ${isActive ? 'font-black' : 'font-bold'} uppercase`}>{item.label}</span>
           </Link>
         );
       })}

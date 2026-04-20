@@ -15,13 +15,21 @@ function generateOTP() {
 }
 
 exports.handler = async (event) => {
+  const headers = {
+    'Access-Control-Allow-Origin': event.headers['origin'] || '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json',
+  };
+
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { statusCode: 405, headers, body: 'Method Not Allowed' };
   }
   try {
     const { phone } = JSON.parse(event.body);
     if (!phone || phone.length < 10) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Valid phone number required' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Valid phone number required' }) };
     }
 
     // Rate limit: max 3 OTPs per phone per 10 minutes
@@ -33,7 +41,7 @@ exports.handler = async (event) => {
       .gte('created_at', tenMinutesAgo);
 
     if (count && count >= 3) {
-      return { statusCode: 429, body: JSON.stringify({ error: 'Too many OTP requests. Try again in 10 minutes.' }) };
+      return { statusCode: 429, headers, body: JSON.stringify({ error: 'Too many OTP requests. Try again in 10 minutes.' }) };
     }
 
     const otp = generateOTP();
@@ -110,6 +118,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
+      headers,
       body: JSON.stringify({ 
         success: true, 
         message: 'OTP sent successfully',
@@ -119,6 +128,6 @@ exports.handler = async (event) => {
     };
   } catch (err) {
     console.error('[send-otp] Error:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Failed to send OTP. Please try again.' }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to send OTP. Please try again.' }) };
   }
 };

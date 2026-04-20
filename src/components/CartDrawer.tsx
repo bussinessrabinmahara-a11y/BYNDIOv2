@@ -113,13 +113,13 @@ export default function CartDrawer({ isOpen, onClose, onOpenLogin }: {
                   <button 
                     key={s.id}
                     onClick={() => useAppStore.getState().setShippingMethodId(s.id)}
-                    className={`flex flex-col items-center py-2 rounded-xl border text-[9px] font-black uppercase tracking-tight transition-all ${
+                    className={`flex flex-col items-center py-2.5 px-1 rounded-xl border text-[9px] md:text-[10px] font-black uppercase tracking-tight transition-all ${
                       shippingMethodId === s.id 
                         ? 'bg-[#0D47A1] border-[#0D47A1] text-white shadow-md' 
                         : 'bg-white border-gray-100 text-gray-400'
                     }`}>
-                    {s.label}
-                    <div className={shippingMethodId === s.id ? 'text-blue-200' : 'text-gray-300'}>₹{s.fee}</div>
+                    <span className="truncate w-full text-center">{s.label}</span>
+                    <div className={shippingMethodId === s.id ? 'text-blue-200 mt-0.5' : 'text-gray-300 mt-0.5'}>₹{s.fee}</div>
                   </button>
                 ))}
               </div>
@@ -139,7 +139,7 @@ export default function CartDrawer({ isOpen, onClose, onOpenLogin }: {
  
               <button
                 onClick={handleCheckout}
-                className="w-full bg-[#0D47A1] hover:bg-[#1565C0] text-white h-[48px] rounded-2xl font-black text-[14px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20 active:scale-95 transition-all"
+                className="w-full bg-[#0D47A1] hover:bg-[#1565C0] text-white py-3.5 md:py-4 md:h-[48px] rounded-xl md:rounded-2xl font-black text-[12px] md:text-[14px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20 active:scale-95 transition-all"
               >
                 {!user && <LogIn size={16} />}
                 {user ? 'Secure Checkout' : 'Login Proceed'}

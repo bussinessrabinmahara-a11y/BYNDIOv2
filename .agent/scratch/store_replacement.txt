@@ -1,0 +1,22 @@
+// S-03: Unified subscription payment — delegates to canonical initiateSubscriptionPayment
+       // which handles server-side order creation, Razorpay checkout, and state sync
+       subscribeWithRazorpay: async (planName: string, amountMonthly: number) => {
+          const { user } = get();
+          if (!user) throw new Error('Login required');
+          
+          const { initiateSubscriptionPayment } = await import('../lib/subscriptionPayment');
+          
+          return new Promise<void>((resolve, reject) => {
+            initiateSubscriptionPayment(
+              { 
+                name: planName, 
+                price: amountMonthly, 
+                priceDisplay: `₹${amountMonthly}/mo`, 
+                role: 'seller' 
+              },
+              { id: user.id, name: user.name || user.email || '', email: user.email || '' },
+              () => resolve(),
+              (msg) => reject(new Error(msg))
+            );
+          });
+        },

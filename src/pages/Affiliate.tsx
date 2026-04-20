@@ -24,10 +24,11 @@ export default function Affiliate() {
         status: 'pending',
       });
       if (error) throw error;
-    } catch {
-      // Graceful fallback even if table not created yet
+      toastSuccess('Partner application submitted! We will review it shortly.');
+      setSubmitted(true);
+    } catch (err: any) {
+      toast('Failed to submit application: ' + err.message, 'error');
     }
-    setSubmitted(true);
   };
 
   const plans = [

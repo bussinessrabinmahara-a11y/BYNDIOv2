@@ -33,23 +33,23 @@ export default function RewardsWallet() {
     if (rewardPoints < 100) { toast('Minimum 100 points needed to redeem.', 'info'); return; }
     if (!user) return;
     try {
-      const cashback = Math.floor(rewardPoints * 0.1);
-      // Deduct points
-      await supabase.from('reward_points').insert({
-        user_id: user.id,
-        points_earned: 0,
-        points_redeemed: rewardPoints,
-        action: 'redeemed_for_cashback',
+      const response = await fetch('/.netlify/functions/redeem-points', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify({ rewardPoints })
       });
-      // Add to wallet
-      await supabase.from('wallets').upsert(
-        { user_id: user.id, balance: walletBalance + cashback },
-        { onConflict: 'user_id' }
-      );
-      toastSuccess(`Redeemed ${rewardPoints} points = ₹${cashback} added to wallet!`);
+      
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Redemption failed');
+
+      toastSuccess(`Redeemed ${rewardPoints} points = ₹${result.cashback} added to wallet!`);
       fetchWalletData();
+      fetchHistory();
     } catch (err: any) {
-      toast('Redemption failed. Please try again.', 'error');
+      toast(err.message || 'Redemption failed. Please try again.', 'error');
     }
   };
 

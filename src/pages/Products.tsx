@@ -121,7 +121,7 @@ export default function Products() {
   };
 
   const isFiltered = infOnly || priceRange[0] > globalMin || priceRange[1] < globalMax
-    || (catParam ? !cats.includes(catParam) : cats.length < CATEGORIES.length);
+    || (catParam ? !(cats || []).includes(catParam) : (cats || []).length < (CATEGORIES || []).length);
 
   const totalPages = Math.ceil(totalProducts / PAGE_SIZE);
 
@@ -129,7 +129,7 @@ export default function Products() {
 
   const toggleCat = (cat: string) => {
     setPage(1);
-    setCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+    setCats(prev => (prev || []).includes(cat) ? (prev || []).filter(c => c !== cat) : [...(prev || []), cat]);
   };
 
   const FilterPanel = () => (
@@ -148,7 +148,7 @@ export default function Products() {
         <div className="text-[11px] font-extrabold uppercase tracking-wide text-gray-500 mb-2.5">Category</div>
         {CATEGORIES.map(c => (
           <label key={c} className="flex items-center gap-2 py-1.5 cursor-pointer text-[13px]">
-            <input type="checkbox" checked={cats.includes(c)} onChange={() => toggleCat(c)} className="accent-[#1565C0] cursor-pointer" />
+            <input type="checkbox" checked={(cats || []).includes(c)} onChange={() => toggleCat(c)} className="accent-[#1565C0] cursor-pointer" />
             <span>{c === 'Beauty' ? 'Beauty & Care' : c === 'Kids' ? 'Kids & Baby' : c === 'Sports' ? 'Sports & Fitness' : c}</span>
           </label>
         ))}
@@ -273,7 +273,7 @@ export default function Products() {
         {/* Product Grid */}
         <div className="flex-1 p-2 md:p-4">
           {isDBLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4">
               {[...Array(10)].map((_, i) => (
                 <div key={i} className="bg-white rounded-[10px] overflow-hidden animate-pulse">
                   <div className="h-[155px] bg-gray-200" />
@@ -305,7 +305,7 @@ export default function Products() {
                   visible: { transition: { staggerChildren: 0.03 } },
                   hidden: {}
                 }}
-                className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4"
+                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4"
               >
                 {realProducts.map(p => <ProductCard key={p.id} product={p} />)}
               </motion.div>

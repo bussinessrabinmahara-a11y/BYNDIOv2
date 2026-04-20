@@ -5,13 +5,15 @@ import { toastSuccess, toast } from '../components/Toast';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAppStore } from '../store';
+import { initiateSubscriptionPayment } from '../lib/subscriptionPayment';
 import {
   CheckCircle, ShieldCheck, Zap, TrendingUp, Package, IndianRupee,
   ChevronDown, ChevronUp, MessageCircle, Mail, Phone, Star,
   AlertTriangle, Info, RotateCcw, Truck, Award, BookOpen,
   Upload, Clock, Users, BarChart2, ArrowUpRight, CheckCircle2,
-  ArrowRight, Mic, ChevronRight
+  ArrowRight, Mic, ChevronRight, X
 } from 'lucide-react';
+import { INDIAN_STATES } from '../lib/gstCompliance';
 
 // ─── Static Data ───────────────────────────────────────────────
 const TRUST_BADGES = [
@@ -207,6 +209,48 @@ export default function Seller() {
     setFormData((prev: any) => ({ ...prev, [name]: value }));
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    setSubmitting(true);
+    try {
+      const uploadedUrls = formData.kycDocuments || [];
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 5 * 1024 * 1024) {
+          toast(`File ${file.name} is too large (max 5MB)`, 'error');
+          continue;
+        }
+
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${i}.${fileExt}`;
+        const filePath = `onboarding/${fileName}`; 
+
+
+        const { error: uploadError } = await supabase.storage
+          .from('seller-documents')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('seller-documents')
+          .getPublicUrl(filePath);
+
+        uploadedUrls.push(publicUrl);
+      }
+
+      setFormData((prev: any) => ({ ...prev, kycDocuments: uploadedUrls }));
+      toastSuccess('Documents linked successfully!');
+    } catch (err: any) {
+      toast(err.message || 'Upload failed', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSaveForLater = () => {
     localStorage.setItem('byndio_seller_form', JSON.stringify(formData));
     toastSuccess('Progress saved! You can return later to complete your registration.');
@@ -223,14 +267,18 @@ export default function Seller() {
         phone:           formData.phone || '',
         business_name:   formData.businessName || '',
         category:        formData.category || 'Fashion & Clothing',
-        has_gst:         hasGst,
+        has_gst:         !!formData.gstNumber,
         gst_number:      formData.gstNumber || '',
+        role:            formData.role || 'seller',
         
         // KYC Data
         pan_number:      formData.panNumber || '',
         aadhaar_number:  formData.aadhaarNumber || '',
         bank_account:    formData.bankAccount || '',
         ifsc_code:       formData.ifscCode || '',
+        kyc_documents:   formData.kycDocuments || [],
+        state:           formData.state || '',
+        business_state:  formData.state || '', // GST Compliance field
         
         status: 'pending',
       });
@@ -240,7 +288,7 @@ export default function Seller() {
       localStorage.removeItem('byndio_seller_form');
       setFormStep(1);
     } catch (err: any) {
-      toastSuccess('❌ ' + err.message);
+      toast('❌ ' + err.message, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -430,7 +478,32 @@ export default function Seller() {
                     </div>
 
                     <button
-                      onClick={() => document.getElementById('seller-reg-form')?.scrollIntoView({ behavior: 'smooth' })}
+                      onClick={() => {
+                        if (!user) {
+                          document.getElementById('seller-reg-form')?.scrollIntoView({ behavior: 'smooth' });
+                          return;
+                        }
+
+                        if (plan.price === '₹0') {
+                           document.getElementById('seller-reg-form')?.scrollIntoView({ behavior: 'smooth' });
+                           return;
+                        }
+                        if (plan.price === 'Custom') {
+                           window.open('mailto:business@byndio.in?subject=Premium%20Plan%20Inquiry&body=Hi%2C%20I%20am%20interested%20in%20the%20Premium%20plan.', '_blank');
+                           return;
+                        }
+                        initiateSubscriptionPayment(
+                          { 
+                            name: plan.name, 
+                            price: parseInt(plan.price.replace('₹', '').replace(',', '')) || 0, 
+                            priceDisplay: plan.price + '/mo', 
+                            role: 'seller' 
+                          },
+                          { id: user.id, name: user.name || user.email || '', email: user.email || '' },
+                          (pName) => { toastSuccess(`🎉 ${pName} plan activated!`); navigate('/seller-dashboard'); },
+                          (msg) => { toast(msg, 'error'); }
+                        );
+                      }}
                       className={`w-full py-2.5 rounded-xl text-[9.5px] md:text-[12px] font-black transition-all hover:scale-[1.02] border-2 uppercase tracking-wider ${plan.ctaStyle}`}>
                       {plan.cta}
                     </button>
@@ -774,10 +847,23 @@ export default function Seller() {
                   <Field label="Full Name"><input type="text" name="fullName" value={formData.fullName || ''} onChange={handleInputChange} placeholder="Legal name" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
                   <Field label="Mobile"><input type="tel" name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="+91..." className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Field label="Email Address"><input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="you@example.com" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
-                  <Field label="State / City"><input type="text" name="city" value={formData.city || ''} onChange={handleInputChange} placeholder="e.g. Hyderabad" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
+                  <Field label="Join As">
+                    <select name="role" value={formData.role || 'seller'} onChange={handleInputChange} className={`${inputCls} py-2 text-[11px] h-9`} required>
+                      <option value="seller">Product Seller</option>
+                      <option value="influencer">Influencer / Creator</option>
+                    </select>
+                  </Field>
                 </div>
+                  <Field label="Business State">
+                    <select name="state" value={formData.state || ''} onChange={handleInputChange} className={`${inputCls} py-2 text-[11px] h-9`} required>
+                      <option value="">Select State</option>
+                      {INDIAN_STATES.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </Field>
                 <button type="button" onClick={() => setFormStep(2)} className="w-full bg-[#0D47A1] hover:bg-[#1565C0] text-white py-2.5 rounded-xl text-[11px] font-black transition-all shadow-md uppercase tracking-widest mt-2">Next: Business →</button>
                 <button type="button" onClick={handleSaveForLater} className="w-full mt-1 text-gray-400 text-[9px] font-black uppercase tracking-widest hover:text-gray-600 flex items-center justify-center gap-1.5"><Clock size={10}/> Save Progress</button>
               </div>
@@ -794,13 +880,13 @@ export default function Seller() {
                         {['Fashion','Beauty','Home','Kitchen','Gadgets','Toys','Wellness'].map(c => <option key={c}>{c}</option>)}
                       </select>
                     </Field>
-                    <Field label="Revenue">
-                      <select name="monthlyRevenue" value={formData.monthlyRevenue || ''} onChange={handleInputChange} className={`${inputCls} py-2 text-[11px] h-9`}>
-                        {['₹0-10K','₹10K-50K','₹50K-1L','₹1L+'].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </Field>
                   </div>
-                  <Field label="GST Number (Mandatory)"><input type="text" name="gstNumber" value={formData.gstNumber || ''} onChange={handleInputChange} placeholder="22AAAAA0000A1Z5" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
+                  <Field label="GST Number (Optional)">
+                    <div className="space-y-1">
+                      <input type="text" name="gstNumber" value={formData.gstNumber || ''} onChange={handleInputChange} placeholder="Optional (Required for All-India Shipping)" className={`${inputCls} py-2 text-[11px] h-9`} />
+                      {!formData.gstNumber && <p className="text-[8px] text-orange-500 font-bold uppercase">⚠️ Missing GST restricts you to selling within {formData.state || 'your state'}.</p>}
+                    </div>
+                  </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <button type="button" onClick={() => setFormStep(1)} className="bg-gray-100 text-gray-600 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest">Back</button>
@@ -823,6 +909,26 @@ export default function Seller() {
                 <div className="grid grid-cols-1 gap-2">
                   <Field label="Bank Account"><input type="text" name="bankAccount" value={formData.bankAccount || ''} onChange={handleInputChange} placeholder="Account Number" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
                   <Field label="IFSC Code"><input type="text" name="ifscCode" value={formData.ifscCode || ''} onChange={handleInputChange} placeholder="SBIN..." className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
+                </div>
+                <div className="space-y-1 mt-1">
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Upload Documents (PAN / GST)</label>
+                  <div className="flex flex-col gap-2">
+                    <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" id="seller-docs-upload" />
+                    <label htmlFor="seller-docs-upload" className="w-full border border-dashed border-gray-300 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-50 flex items-center justify-center gap-2 transition-all">
+                      <Upload size={14} className="text-gray-400"/>
+                      <span className="text-[11px] font-bold text-gray-500">Click to upload scans</span>
+                    </label>
+                    {formData.kycDocuments && formData.kycDocuments.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {formData.kycDocuments.map((url: string, idx: number) => (
+                          <div key={idx} className="relative w-12 h-12 bg-gray-100 rounded border border-gray-200 overflow-hidden group">
+                            {url.toLowerCase().endsWith('.pdf') ? <div className="text-[8px] font-black text-center mt-4">PDF</div> : <img src={url} className="w-full h-full object-cover" />}
+                            <button type="button" onClick={() => setFormData((prev: any) => ({ ...prev, kycDocuments: prev.kycDocuments.filter((_: any, i: number) => i !== idx) }))} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100"><X size={8}/></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <button type="button" onClick={() => setFormStep(2)} className="bg-gray-100 text-gray-600 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest">Back</button>

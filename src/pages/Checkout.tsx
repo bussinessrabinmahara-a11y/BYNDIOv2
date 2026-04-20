@@ -9,26 +9,21 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '../components/PageWrapper';
+import { INDIAN_STATES, canSellerShipToState } from '../lib/gstCompliance';
 
-// All Indian States & Union Territories
-const INDIAN_STATES = [
-  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
-  'Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh',
-  'Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab',
-  'Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand',
-  'West Bengal','Andaman & Nicobar Islands','Chandigarh','Dadra & Nagar Haveli and Daman & Diu',
-  'Delhi','Jammu & Kashmir','Ladakh','Lakshadweep','Puducherry',
-];
+// INDIAN_STATES imported from gstCompliance.ts
 
 export default function Checkout() {
   usePageTitle('Secure Checkout');
-  const { cart, user, createOrder } = useAppStore();
+  const { cart, user, createOrder, buyerState, setBuyerState } = useAppStore();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(1);
   const [payment, setPayment] = useState('upi');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [complianceErrors, setComplianceErrors] = useState<string[]>([]);
+  const [sellerStates, setSellerStates] = useState<Record<string, {state: string, gst: string}>>({});
   
   // ── P0 Fix: Address state properly declared ──
   const [address, setAddress] = useState({
@@ -54,9 +49,23 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
   const [saveNewAddress, setSaveNewAddress] = useState(false);
 
-  // H-07: Shipping Methods
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [selectedMethod, setSelectedMethod] = useState<any>(null);
   const [shippingMethods, setShippingMethods] = useState<any[]>([]);
   const [selectedShippingMethod, setSelectedShippingMethod] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.from('payment_methods').select('*').eq('is_active', true).order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (data) {
+          setPaymentMethods(data);
+          // Set default payment method
+          const razorpay = data.find(m => m.provider === 'razorpay');
+          if (razorpay) { setPayment(razorpay.id); setSelectedMethod(razorpay); }
+          else if (data.length > 0) { setPayment(data[0].id); setSelectedMethod(data[0]); }
+        }
+      });
+  }, []);
 
   // Sync user name if it loads after mount
   useEffect(() => {
@@ -85,6 +94,58 @@ export default function Checkout() {
       }
     });
   }, [user?.id, cart]);
+
+  // GST COMPLIANCE: Use cart-level seller info (populated from store)
+  // Also sync address.state to global buyerState for cross-page consistency
+  useEffect(() => {
+    if (address.state && address.state !== buyerState) {
+      setBuyerState(address.state);
+    }
+  }, [address.state]);
+
+  // Pre-fill address state from global buyerState if set
+  useEffect(() => {
+    if (buyerState && !address.state) {
+      setAddress(prev => ({ ...prev, state: buyerState }));
+    }
+  }, [buyerState]);
+
+  // GST COMPLIANCE: Fetch seller info for cart items that don't have it
+  const fetchSellerCompliance = async () => {
+    const sellerIds = Array.from(new Set(cart.filter(i => i.seller_id).map(item => item.seller_id!)));
+    if (sellerIds.length === 0) return;
+    
+    const { data } = await supabase.from('sellers').select('id, business_state, gst_number').in('id', sellerIds);
+    if (data) {
+      const mapping: Record<string, {state: string, gst: string}> = {};
+      data.forEach(s => { mapping[s.id] = { state: s.business_state, gst: s.gst_number }; });
+      setSellerStates(mapping);
+    }
+  };
+
+  useEffect(() => {
+    if (cart.length > 0) fetchSellerCompliance();
+  }, [cart]);
+
+  // Validate compliance whenever address state or seller info changes
+  useEffect(() => {
+    const errors: string[] = [];
+    cart.forEach(item => {
+      // Use cart-level GST info first, fall back to fetched sellerStates
+      const sellerState = item.seller_state || sellerStates[item.seller_id!]?.state;
+      const sellerHasGst = item.seller_has_gst ?? !!(sellerStates[item.seller_id!]?.gst);
+      const check = canSellerShipToState(sellerState, sellerHasGst, address.state);
+      if (!check.allowed) {
+        errors.push(item.id as string);
+      }
+    });
+    setComplianceErrors(errors);
+    if (errors.length > 0) {
+      setError(`${errors.length} item(s) can only ship within the seller's state (GST compliance). Remove them to proceed.`);
+    } else if (error?.includes('ship within') || error?.includes('ships within')) {
+      setError(null);
+    }
+  }, [address.state, sellerStates, cart]);
 
   const siteSettings = useAppStore(s => s.siteSettings);
   // M-08: Cap add-to-cart at 10 (applying here for subtotal as fallback)
@@ -157,7 +218,8 @@ export default function Checkout() {
     setError(null);
     
     // P0-PAY-03: COD Order Verification Flow
-    if (payment === 'cod' && !isOtpSent) {
+    const isCOD = selectedMethod?.provider === 'cod';
+    if (isCOD && !isOtpSent) {
       try {
         // C-01: Remove import.meta.env.DEV fallback, call Netlify function directly
         const res = await fetch(`/.netlify/functions/send-otp`, {
@@ -191,7 +253,17 @@ export default function Checkout() {
       }
 
       // C-02: Pass selectedShippingMethod?.id to server-side order creation
-      const res = await (createOrder as any)(address, payment, total, platformFee, shippingFee, appliedCoupon?.code, selectedShippingMethod?.id);
+      // H-GST: Final Compliance Guard
+      const { data: compRes, error: compErr } = await supabase.rpc('validate_gst_compliance', {
+        p_cart: cart.map(i => ({ id: i.id, seller_id: i.seller_id })),
+        p_buyer_state: address.state
+      });
+
+      if (compErr || (compRes && !compRes.is_compliant)) {
+        throw new Error(compRes?.message || 'GST Compliance check failed.');
+      }
+
+      const res = await (createOrder as any)(address, selectedMethod?.provider || 'manual', total, platformFee, shippingFee, appliedCoupon?.code, selectedShippingMethod?.id);
       if (res.success) {
         navigate('/order-success', { state: { orderId: res.orderId } });
       } else {
@@ -451,10 +523,10 @@ export default function Checkout() {
 
                     <button 
                       onClick={handleProceedToPayment}
-                      disabled={!address.fullName || !address.mobile || !address.line1 || !address.pin || !address.city || !address.state}
+                      disabled={!address.fullName || !address.mobile || !address.line1 || !address.pin || !address.city || !address.state || complianceErrors.length > 0}
                       className="w-full bg-[#0D47A1] hover:bg-blue-800 disabled:opacity-30 text-white py-5 rounded-2xl font-black text-lg transition-all shadow-xl shadow-blue-100 flex items-center justify-center gap-3"
                     >
-                      Process Payment <ChevronRight size={20} />
+                      {complianceErrors.length > 0 ? 'Shipping Restriction' : 'Process Payment'} <ChevronRight size={20} />
                     </button>
                   </motion.div>
                 )}
@@ -470,30 +542,61 @@ export default function Checkout() {
                     <h2 className="text-2xl font-black text-gray-900 mb-8 font-inter">Payment Method</h2>
                     
                     <div className="space-y-4 mb-10">
-                       {[
-                         { id: 'upi', label: 'UPI / PhonePe / GPay', desc: 'Secure instant bank transfer', icon: <CreditCard size={20} /> },
-                         { id: 'card', label: 'Debit / Credit Card', desc: 'Visa, Mastercard, RuPay', icon: <CreditCard size={20} /> },
-                         { id: 'nb', label: 'Net Banking', desc: 'Access 50+ major banks', icon: <CreditCard size={20} /> },
-                         { id: 'cod', label: 'Cash on Delivery', desc: total > 5000 ? 'Not available for orders above ₹5,000' : 'Pay when you receive (₹5,000 max)', icon: <Truck size={20} />, disabled: total > 5000 },
-                       ].map(opt => (
-                         <label 
-                          key={opt.id}
-                          className={`flex items-center gap-5 p-5 border-2 rounded-2xl transition-all ${(opt as any).disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'} ${payment === opt.id ? 'border-[#0D47A1] bg-[#EEF2FF]' : 'border-gray-50 bg-gray-50 hover:border-gray-200'}`}
-                         >
-                            <input type="radio" checked={payment === opt.id} onChange={() => !(opt as any).disabled && setPayment(opt.id)} disabled={(opt as any).disabled} className="w-5 h-5 accent-[#0D47A1]" />
-                            <div className={`p-3 rounded-xl ${payment === opt.id ? 'bg-white text-[#0D47A1]' : 'bg-white text-gray-400'}`}>
-                               {opt.icon}
-                            </div>
-                            <div className="flex-1">
-                               <div className="text-[15px] font-black text-gray-900 leading-none">{opt.label}</div>
-                               <div className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-tight">{opt.desc}</div>
-                            </div>
-                         </label>
+                       {paymentMethods.map(opt => (
+                         <div key={opt.id} className="space-y-3">
+                            <label 
+                              className={`flex items-center gap-5 p-5 border-2 rounded-2xl transition-all cursor-pointer ${payment === opt.id ? 'border-[#0D47A1] bg-[#EEF2FF]' : 'border-gray-50 bg-gray-50 hover:border-gray-200'}`}
+                              onClick={() => { setPayment(opt.id); setSelectedMethod(opt); }}
+                            >
+                                <input type="radio" checked={payment === opt.id} readOnly className="w-5 h-5 accent-[#0D47A1]" />
+                                <div className={`p-3 rounded-xl ${payment === opt.id ? 'bg-white text-[#0D47A1]' : 'bg-white text-gray-400'}`}>
+                                   <CreditCard size={20} />
+                                </div>
+                                <div className="flex-1">
+                                   <div className="text-[15px] font-black text-gray-900 leading-none">{opt.name}</div>
+                                   <div className="text-xs text-gray-500 font-bold mt-1 uppercase tracking-tight">{opt.description || opt.provider}</div>
+                                </div>
+                            </label>
+
+                            {/* Manual Payment Details */}
+                            {payment === opt.id && opt.provider === 'manual' && (
+                              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-white border-2 border-[#0D47A1] rounded-3xl shadow-lg space-y-4 mx-2">
+                                <div className="text-[11px] font-black text-[#0D47A1] uppercase tracking-widest border-b pb-2">Payment Details (Pay Here)</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
+                                   {opt.config?.bank_name && (
+                                     <div className="space-y-1">
+                                        <div className="text-gray-400 font-bold text-[10px] uppercase">Bank Transfer</div>
+                                        <div className="font-black text-gray-900">{opt.config.bank_name}</div>
+                                        <div className="font-medium text-gray-600">A/C: {opt.config.account_no}</div>
+                                        <div className="font-medium text-gray-600">IFSC: {opt.config.ifsc}</div>
+                                     </div>
+                                   )}
+                                   {opt.config?.upi_id && (
+                                     <div className="space-y-1">
+                                        <div className="text-gray-400 font-bold text-[10px] uppercase">UPI Payment</div>
+                                        <div className="font-black text-[#0D47A1]">{opt.config.upi_id}</div>
+                                     </div>
+                                   )}
+                                </div>
+                                {opt.config?.qr_url && (
+                                  <div className="flex flex-col items-center gap-2 pt-2 border-t border-dashed">
+                                     <div className="text-[10px] font-black text-gray-400 uppercase">Scan QR to Pay</div>
+                                     <img src={opt.config.qr_url} className="w-32 h-32 rounded-xl shadow-md border-2 border-white" alt="QR" />
+                                  </div>
+                                )}
+                                {opt.config?.instructions && (
+                                  <div className="p-3 bg-blue-50 rounded-xl text-[11px] text-[#0D47A1] font-bold italic">
+                                     💡 {opt.config.instructions}
+                                  </div>
+                                )}
+                              </motion.div>
+                            )}
+                         </div>
                        ))}
                     </div>
 
                     <div className="flex items-center gap-2 p-4 bg-green-50 rounded-2xl text-[#388E3C] text-[13px] font-bold mb-10">
-                       <ShieldCheck size={18} /> Payments are 100% encrypted & secure by Razorpay
+                       <ShieldCheck size={18} /> Payments are 100% encrypted & secure
                     </div>
 
                     {error && (
@@ -616,6 +719,11 @@ export default function Checkout() {
                           </div>
                           <div className="flex-1">
                              <div className="text-[13px] font-black text-gray-900 leading-tight mb-1">{item.name}</div>
+                             {complianceErrors.includes(item.id.toString()) && (
+                                <div className="text-[9px] font-black text-red-500 uppercase mb-1">
+                                  ⚠️ Shipping only within {item.seller_id ? sellerStates[item.seller_id]?.state : 'seller state'}
+                                </div>
+                             )}
                              <div className="flex items-center justify-between text-[11px] font-bold text-gray-400">
                                 <span>QTY: {item.qty} {item.qty >= 10 ? '(Max)' : ''}</span>
                                 <span className="text-gray-900">₹{(item.price * item.qty).toLocaleString('en-IN')}</span>

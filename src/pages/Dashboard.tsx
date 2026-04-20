@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { 
   ShoppingBag, BarChart2, Package, Tag, DollarSign, TrendingUp, Star, 
   Megaphone, Settings, Plus, X, Upload, Trophy, Shield, Check, 
-  Users, Bell, CreditCard, ChevronRight, Eye, Trash2, Edit 
+  Users, Bell, CreditCard, ChevronRight, Eye, Trash2, Edit, ShieldCheck 
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { initiateSubscriptionPayment } from '../lib/subscriptionPayment';
@@ -12,6 +12,7 @@ import { toast, toastSuccess } from '../components/Toast';
 import { useAppStore } from '../store';
 import BulkUpload from '../components/BulkUpload';
 import { generateGSTInvoice } from '../lib/gstInvoice';
+import { INDIAN_STATES } from '../lib/gstCompliance';
 import InputModal from '../components/InputModal';
 import imageCompression from 'browser-image-compression'; // H-11
 
@@ -120,7 +121,7 @@ export default function Dashboard() {
   const [isSavingBank, setIsSavingBank] = useState(false);
 
   // FIX #2: KYC state
-  const [kycData, setKycData] = useState({ gst_number: '', pan_number: '', business_name: '', business_address: '' });
+  const [kycData, setKycData] = useState({ gst_number: '', pan_number: '', business_name: '', business_address: '', state: '', kyc_documents: [] as string[] });
   const [kycStatus, setKycStatus] = useState<string | null>(null);
   const [isSavingKyc, setIsSavingKyc] = useState(false);
   const [kycStep, setKycStep] = useState(1);
@@ -209,10 +210,56 @@ export default function Dashboard() {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
+
+  const kycFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleKycUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !user) return;
+    
+    setImgUploading(true);
+    try {
+      const uploadedUrls = [...kycData.kyc_documents];
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 5 * 1024 * 1024) {
+          toast(`File ${file.name} is too large (max 5MB)`, 'error');
+          continue;
+        }
+
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}-${i}.${fileExt}`;
+        const filePath = fileName; // Upload directly to user-id folder
+
+        const { error: uploadError } = await supabase.storage
+          .from('seller-documents')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('seller-documents')
+          .getPublicUrl(filePath);
+
+        uploadedUrls.push(publicUrl);
+      }
+
+      setKycData(prev => ({ ...prev, kyc_documents: uploadedUrls }));
+      toastSuccess('Documents uploaded successfully!');
+    } catch (err: any) {
+      toast(err.message || 'Upload failed', 'error');
+    } finally {
+      setImgUploading(false);
+      if (kycFileInputRef.current) kycFileInputRef.current.value = '';
+    }
+  };
   useEffect(() => {
-    if (user && user.role === 'seller') {
+    if (user && (user.role === 'seller' || user.role === 'admin')) {
       fetchDashboardData();
       loadSellerSettings();
+    } else if (user) {
+      setLoading(false);
     }
   }, [user]);
 
@@ -252,6 +299,8 @@ export default function Dashboard() {
         pan_number: data.pan_number || '',
         business_name: data.business_name || '',
         business_address: data.business_address || '',
+        state: data.business_state || data.state || '',
+        kyc_documents: data.kyc_documents || []
       });
     }
     const { data: wallet } = await supabase.from('wallets').select('balance, pending_balance').eq('user_id', user.id).maybeSingle();
@@ -392,6 +441,8 @@ export default function Dashboard() {
         id: user.id,
         business_name: storeInfo.store_name.trim() || `${user.name}'s Store`,
         business_address: storeInfo.store_location.trim(),
+        state: kycData.state, // Sync state from kycData
+        business_state: kycData.state, // GST Compliance field
       }, { onConflict: 'id' });
       // Also update the users table for email/phone (best-effort)
       await supabase.from('users').update({
@@ -555,12 +606,54 @@ export default function Dashboard() {
 
     // If KYC not approved, redirect some tabs to KYC
     const isLocked = navItems.find(n => n.id === tab)?.locked;
-    if (isLocked && kycStatus !== 'approved') {
-      setTab('kyc');
-    }
+    const activeTab = (isLocked && kycStatus !== 'approved') ? 'kyc' : tab;
 
-    switch (tab) {
+    switch (activeTab) {
       case 'kyc':
+        if (kycStatus === 'submitted' || kycStatus === 'approved') {
+          return (
+            <div className="max-w-3xl mx-auto py-12 px-4 text-center">
+              <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center text-green-500 mx-auto mb-6">
+                <ShieldCheck size={40} />
+              </div>
+              <h2 className="text-2xl font-black text-gray-900 mb-2">
+                {kycStatus === 'approved' ? '✅ Your Store is Verified!' : '⏳ Verification in Progress'}
+              </h2>
+              <p className="text-gray-500 mb-8 max-w-md mx-auto">
+                {kycStatus === 'approved' 
+                  ? 'Your identity and business details have been verified. You now have full access to all seller features and payouts.'
+                  : 'We have received your KYC documents. Our compliance team is currently reviewing your application. This usually takes 24-48 hours.'}
+              </p>
+              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm text-left">
+                <h3 className="text-sm font-bold text-gray-900 mb-4">Submitted Details</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">PAN Number</div>
+                    <div className="text-xs font-bold text-gray-900">{kycData.pan_number}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">GST Number</div>
+                    <div className="text-xs font-bold text-gray-900">{kycData.gst_number || 'Not Provided'}</div>
+                  </div>
+                </div>
+                {kycData.kyc_documents.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-50">
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Linked Documents</div>
+                    <div className="flex flex-wrap gap-2">
+                      {kycData.kyc_documents.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors">
+                          View Document {i + 1}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => setTab('overview')} className="mt-8 text-sm font-bold text-[#0D47A1] hover:underline">← Back to Dashboard</button>
+            </div>
+          );
+        }
+
         return (
           <div className="max-w-4xl mx-auto py-8">
             <div className="text-2xl font-black text-[#0D47A1] mb-2 flex items-center gap-3">
@@ -702,6 +795,7 @@ export default function Dashboard() {
                           gst_number: kycData.gst_number?.trim().toUpperCase() || null,
                           pan_number: kycData.pan_number.trim().toUpperCase(),
                           kyc_status: 'submitted',
+                          kyc_documents: kycData.kyc_documents
                         }).eq('id', user!.id);
 
                         if (error) throw error;
@@ -728,13 +822,51 @@ export default function Dashboard() {
                         </div>
                         <div className="mt-2">
                           <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest pl-1 block mb-2">Upload PAN / GST Scans</label>
-                          <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#0D47A1] hover:bg-blue-50/30 transition-all group">
+                          <input 
+                            type="file" 
+                            ref={kycFileInputRef} 
+                            onChange={handleKycUpload} 
+                            multiple 
+                            accept=".pdf,.jpg,.jpeg,.png" 
+                            className="hidden" 
+                          />
+                          <div 
+                            onClick={() => kycFileInputRef.current?.click()}
+                            className="border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#0D47A1] hover:bg-blue-50/30 transition-all group"
+                          >
                             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 mb-3 group-hover:scale-110 transition-transform">
                               <Upload size={28} />
                             </div>
-                            <div className="text-sm font-bold text-[#0D47A1] mb-1">Click to securely link documents</div>
+                            <div className="text-sm font-bold text-[#0D47A1] mb-1">
+                              {imgUploading ? 'Uploading...' : 'Click to securely link documents'}
+                            </div>
                             <div className="text-xs text-gray-400">PDF, JPG, PNG — max 5MB per file</div>
                           </div>
+                          
+                          {/* Document Preview */}
+                          {kycData.kyc_documents.length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-3">
+                              {kycData.kyc_documents.map((url, idx) => (
+                                <div key={idx} className="relative group w-20 h-20 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+                                  {url.toLowerCase().endsWith('.pdf') ? (
+                                    <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-red-600">PDF</div>
+                                  ) : (
+                                    <img src={url} alt="KYC Scan" className="w-full h-full object-cover" />
+                                  )}
+                                  <button 
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setKycData(prev => ({ ...prev, kyc_documents: prev.kyc_documents.filter((_, i) => i !== idx) }));
+                                    }}
+                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       
@@ -763,6 +895,29 @@ export default function Dashboard() {
             <div className="text-xl font-black text-[#0D47A1] mb-4 flex items-center gap-2">
               <BarChart2 className="w-6 h-6" /> Seller Overview
             </div>
+
+            {/* GST COMPLIANCE WARNING */}
+            {!kycData.gst_number && (
+              <div className="mb-6 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-4 md:p-5 flex items-start gap-4 shadow-sm">
+                <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-orange-100">
+                  <Shield size={20} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-black text-orange-900 mb-1 flex items-center gap-2">
+                    ⚖️ Intra-State Selling Restriction
+                  </h3>
+                  <p className="text-xs font-bold text-orange-800 leading-relaxed opacity-80">
+                    Under Indian GST law, sellers without a GST registration can only sell products within their own state 
+                    <span className="font-black underline mx-1">({kycData.state || 'Maharashtra'})</span>. 
+                    Your products will be automatically hidden from buyers outside this state.
+                  </p>
+                  <button onClick={() => setTab('settings')} className="mt-2.5 text-[10px] font-black text-orange-600 bg-white px-3 py-1.5 rounded-lg border border-orange-200 hover:bg-orange-100 transition-all uppercase tracking-widest shadow-sm">
+                    Add GST to sell nationwide
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
               <div className="bg-white rounded-[10px] p-4.5 shadow-sm flex items-center gap-3.5">
                 <div className="w-12 h-12 rounded-[10px] bg-[#E3F2FD] flex items-center justify-center text-[28px] shrink-0">📦</div>
@@ -1331,8 +1486,62 @@ export default function Dashboard() {
                  <button onClick={() => setTab('kyc')} className="bg-[#E65100] text-white px-6 py-2.5 rounded-lg font-black text-sm hover:bg-[#EF6C00] transition-colors shadow-md flex items-center gap-2">Complete KYC <ChevronRight size={16} /></button>
               </div>
             )}
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <div className="bg-white rounded-[10px] p-5 shadow-sm">
+                <div className="text-[14px] font-bold mb-4 border-b border-gray-100 pb-2 flex items-center justify-between">
+                  Subscription Plan
+                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${storeInfo.subscription_plan === 'pro' ? 'bg-blue-100 text-blue-700' : storeInfo.subscription_plan === 'enterprise' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {storeInfo.subscription_plan}
+                  </span>
+                </div>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50">
+                    <div className="text-[12px] font-bold text-gray-900 mb-1">Current Plan: {storeInfo.subscription_plan.toUpperCase()}</div>
+                    <div className="text-[10px] text-gray-500 mb-3">
+                      {storeInfo.subscription_plan === 'free' ? 'Upgrade to Pro for 0% commission and advanced tools.' : 'You have access to all premium seller features.'}
+                    </div>
+                    {storeInfo.subscription_plan === 'free' && (
+                      <div className="grid grid-cols-1 gap-2">
+                        <button 
+                          onClick={() => {
+                            initiateSubscriptionPayment(
+                              { name: 'Starter', price: 499, priceDisplay: '₹499/mo', role: 'seller' },
+                              { id: user!.id, name: user!.name || user!.email || '', email: user!.email || '' },
+                              () => { toastSuccess('Starter plan activated!'); loadSellerSettings(); },
+                              (msg) => { toast(msg, 'error'); }
+                            );
+                          }}
+                          className="w-full bg-[#E65100] hover:bg-[#F57C00] text-white py-2 rounded-lg text-[11px] font-black transition-all">
+                          Upgrade to Starter — ₹499/mo
+                        </button>
+                        <button 
+                          onClick={() => {
+                            initiateSubscriptionPayment(
+                              { name: 'Pro', price: 1999, priceDisplay: '₹1,999/mo', role: 'seller' },
+                              { id: user!.id, name: user!.name || user!.email || '', email: user!.email || '' },
+                              () => { toastSuccess('Pro plan activated!'); loadSellerSettings(); },
+                              (msg) => { toast(msg, 'error'); }
+                            );
+                          }}
+                          className="w-full bg-[#0D47A1] hover:bg-[#1565C0] text-white py-2 rounded-lg text-[11px] font-black transition-all">
+                          Upgrade to Pro — ₹1,999/mo
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                    <div className="text-[11px] font-black text-blue-900 uppercase tracking-widest mb-1">Plan Features</div>
+                    <div className="space-y-1">
+                      {['0% Commission', 'Priority Ranking', 'Featured Seller Badge', 'Bulk Catalog Tools'].map(f => (
+                        <div key={f} className="flex items-center gap-1.5 text-[10px] text-blue-800 font-medium">
+                          <Check size={10} className="shrink-0" /> {f}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div className="bg-white rounded-[10px] p-5 shadow-sm">
                 <div className="text-[14px] font-bold mb-4 border-b border-gray-100 pb-2">Store Information</div>
                 <div className="flex flex-col gap-3">
@@ -1348,6 +1557,20 @@ export default function Dashboard() {
                         className="p-2.5 border border-gray-300 rounded-md text-[13px] outline-none focus:border-[#1565C0] font-medium" />
                     </div>
                   ))}
+                  
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Business State (Required for Compliance)</label>
+                    <select 
+                      value={kycData.state} 
+                      onChange={e => setKycData({ ...kycData, state: e.target.value })}
+                      className="p-2.5 border border-gray-300 rounded-md text-[13px] outline-none focus:border-[#1565C0] font-medium bg-white"
+                    >
+                      <option value="">Select State</option>
+                      {INDIAN_STATES.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
                   <button onClick={handleSaveStore} disabled={isSavingStore}
                     className="bg-[#0D47A1] hover:bg-[#1565C0] disabled:bg-gray-400 text-white py-2.5 rounded-md text-[13px] font-bold transition-colors mt-1">
                     {isSavingStore ? 'Saving...' : 'Save Changes'}
@@ -1505,7 +1728,7 @@ export default function Dashboard() {
               {(storeInfo as any).subscription_plan || 'Starter'} Plan
             </div>
             <button 
-              onClick={() => setTab('settings')} 
+              onClick={() => window.location.href = '/seller#plans'} 
               className="mt-2 text-[10px] bg-white/10 hover:bg-white/20 text-white/80 py-1.5 px-4 rounded-full font-bold transition-all"
             >
               UPGRADE

@@ -18,6 +18,10 @@ export interface Product {
   specs: [string, string][];
   is_sponsored?: boolean;
   flash_sale?: { discount_pct: number; ends_at: string; sale_price: number } | null;
+  // GST Compliance fields
+  seller_id?: string;
+  seller_state?: string | null;
+  seller_has_gst?: boolean;
 }
 
 export interface CartItem extends Product {

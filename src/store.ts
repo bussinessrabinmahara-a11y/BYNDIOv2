@@ -43,6 +43,9 @@ interface AppState {
    deliveryAddress: string | null;
    deliveryCoords: { lat: number; lng: number } | null;
    shippingMethodId: number | null;
+   buyerState: string | null;
+   follows: string[];
+   isLoadingFollows: boolean;
    profileFetchError: boolean;
    isSubmittingOrder: boolean; // C-05
 
@@ -53,13 +56,16 @@ interface AppState {
   fetchAffiliateLinks: () => Promise<void>;
   fetchFlashSales: () => Promise<void>;
   fetchWalletData: () => Promise<void>;
+  fetchFollows: () => Promise<void>;
+  toggleFollow: (id: string) => Promise<void>;
   generateAffiliateLink: (productId: string) => Promise<string | null>;
   addRecentlyViewed: (id: number | string) => void;
+  setBuyerState: (state: string | null) => void;
   setReferralCode: (code: string | null) => void;
 
-  addToCart: (product: Product, qty?: number, affiliateCode?: string) => void;
-  removeFromCart: (id: number | string) => void;
-  updateQty: (id: number | string, delta: number) => void;
+  addToCart: (product: Product, qty?: number, affiliateCode?: string) => Promise<void>;
+  removeFromCart: (id: number | string) => Promise<void>;
+  updateQty: (id: number | string, delta: number) => Promise<void>;
   toggleWishlist: (id: number | string) => void;
   clearCart: () => void;
 
@@ -67,8 +73,7 @@ interface AppState {
   setUser: (user: User | null) => void;
   logout: () => Promise<void>;
   initAuth: () => void;
-  subscribeWithRazorpay: (planName: string, amountMonthly: number) => Promise<void>;
-  createOrder: (address: any, paymentMethod: string, total: number, platformFee?: number, shippingFee?: number, couponCode?: string) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  createOrder: (address: any, paymentMethod: string, total: number, platformFee?: number, shippingFee?: number, couponCode?: string, shippingMethodId?: number) => Promise<{ success: boolean; orderId?: string; error?: string }>;
   updateProfile: (data: { name?: string; address?: string; pincode?: string }) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -94,6 +99,9 @@ export const useAppStore = create<AppState>()(
        deliveryAddress: null,
        deliveryCoords: null,
        shippingMethodId: 1, // Default to Standard
+       buyerState: null,
+       follows: [],
+       isLoadingFollows: false,
        profileFetchError: false,
        isSubmittingOrder: false, // C-05
 
@@ -182,6 +190,35 @@ export const useAppStore = create<AppState>()(
                         }
                       }
                     });
+
+                  // Sync follows
+                  get().fetchFollows();
+
+                  // Sync buyer state from default address
+                  supabase.from('addresses').select('state').eq('user_id', session.user.id).eq('is_default', true).maybeSingle()
+                    .then(({ data: addr }) => {
+                      if (addr?.state) set({ buyerState: addr.state });
+                    });
+
+                  // Sync cart
+                  supabase.from('cart_items').select('*').eq('user_id', session.user.id)
+                    .then(({ data: dbCart }) => {
+                      if (dbCart && dbCart.length > 0) {
+                        const localCart = get().cart;
+                        // Merging logic: prefer DB if exists, otherwise add local
+                        const mergedCart = [...localCart];
+                        dbCart.forEach((item: any) => {
+                          const exists = mergedCart.find(c => c.id === item.product_id);
+                          if (!exists) {
+                            const prod = get().products.find(p => p.id === item.product_id);
+                            if (prod) {
+                              mergedCart.push({ ...prod, qty: item.quantity, affiliate_code: item.affiliate_code });
+                            }
+                          }
+                        });
+                        set({ cart: mergedCart });
+                      }
+                    });
                 });
             } else {
               set({ user: null, isAuthLoading: false });
@@ -238,6 +275,9 @@ export const useAppStore = create<AppState>()(
                inf: p.is_creator_pick ?? false, creator: p.creator_name,
                specs: Object.entries(p.specifications || {}) as [string, string][],
                is_sponsored: p.is_sponsored ?? false,
+               seller_id: p.seller_id,
+               seller_state: p.seller_state || null,
+               seller_has_gst: p.seller_has_gst ?? false,
              })) });
            }
          } catch (err) { 
@@ -286,6 +326,32 @@ export const useAppStore = create<AppState>()(
          } catch (err) { console.error('[store]', err); }
        },
 
+        fetchFollows: async () => {
+          const { user } = get();
+          if (!user || !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) return;
+          set({ isLoadingFollows: true });
+          try {
+            const { data } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
+            if (data) set({ follows: data.map((f: any) => f.following_id) });
+          } catch (err) { console.error('[store] Fetch follows failed:', err); }
+          finally { set({ isLoadingFollows: false }); }
+        },
+
+        toggleFollow: async (id: string) => {
+          const { user, follows } = get();
+          if (!user) return;
+          const isFollowing = (follows || []).includes(id);
+          try {
+            if (isFollowing) {
+              await supabase.from('follows').delete().eq('follower_id', user.id).eq('following_id', id);
+              set({ follows: (follows || []).filter(f => f !== id) });
+            } else {
+              await supabase.from('follows').insert({ follower_id: user.id, following_id: id });
+              set({ follows: [...(follows || []), id] });
+            }
+          } catch (err) { console.error('[store] Toggle follow failed:', err); }
+        },
+
        generateAffiliateLink: async (productId: string) => {
          const { user } = get();
          if (!user) return null;
@@ -307,99 +373,82 @@ export const useAppStore = create<AppState>()(
          }));
        },
 
-        // M-08: Cart quantity capped at 10 per item
-        addToCart: (product, qty = 1, affiliateCode) =>
-          set(state => {
-            const existing = state.cart.find(i => i.id === product.id);
-            if (existing) {
-              const newQty = Math.min(10, existing.qty + qty);
-              return { cart: state.cart.map(i => i.id === product.id ? { ...i, qty: newQty } : i) };
-            }
-            return { cart: [...state.cart, { ...product, qty: Math.min(10, qty), affiliate_code: affiliateCode }] };
-          }),
-        removeFromCart: id => set(state => ({ cart: state.cart.filter(i => i.id !== id) })),
-        updateQty: (id, delta) => set(state => ({ cart: state.cart.map(i => i.id === id ? { ...i, qty: Math.min(10, Math.max(1, i.qty + delta)) } : i) })),
-       toggleWishlist: (id) => {
-         const { user, wishlist } = get();
-         const isIn = wishlist.includes(id);
-         set({ wishlist: isIn ? wishlist.filter(w => w !== id) : [...wishlist, id] });
-         if (user) {
-           if (isIn) {
-             supabase.from('wishlists').delete().eq('user_id', user.id).eq('product_id', String(id)).then(() => {});
+       setBuyerState: (state) => { set({ buyerState: state }); },
+
+        addToCart: async (product, qty = 1, affiliateCode) => {
+           const { user, cart } = get();
+           const existing = cart.find(i => i.id === product.id);
+           let newCart;
+           if (existing) {
+             const newQty = Math.min(10, existing.qty + qty);
+             newCart = cart.map(i => i.id === product.id ? { ...i, qty: newQty } : i);
            } else {
-             supabase.from('wishlists').upsert({ user_id: user.id, product_id: String(id) }, { onConflict: 'user_id,product_id' }).then(() => {});
+             newCart = [...cart, { ...product, qty: Math.min(10, qty), affiliate_code: affiliateCode }];
            }
-         }
-       },
+           set({ cart: newCart });
+
+           if (user) {
+             await supabase.from('cart_items').upsert({
+               user_id: user.id,
+               product_id: product.id as any,
+               quantity: Math.min(10, (existing?.qty || 0) + qty),
+               affiliate_code: affiliateCode
+             }, { onConflict: 'user_id,product_id' });
+           }
+         },
+         removeFromCart: async id => {
+           const { user } = get();
+           set(state => ({ cart: state.cart.filter(i => i.id !== id) }));
+           if (user) {
+             await supabase.from('cart_items').delete().eq('user_id', user.id).eq('product_id', id);
+           }
+         },
+         updateQty: async (id, delta) => {
+           const { user, cart } = get();
+           const item = cart.find(i => i.id === id);
+           if (!item) return;
+           const newQty = Math.min(10, Math.max(1, item.qty + delta));
+           set({ cart: cart.map(i => i.id === id ? { ...i, qty: newQty } : i) });
+           if (user) {
+             await supabase.from('cart_items').update({ quantity: newQty }).eq('user_id', user.id).eq('product_id', id);
+           }
+         },
+         toggleWishlist: (id) => {
+           const { user, wishlist } = get();
+           const isIn = (wishlist || []).includes(id);
+           set({ wishlist: isIn ? (wishlist || []).filter(w => w !== id) : [...(wishlist || []), id] });
+           if (user) {
+             if (isIn) {
+               supabase.from('wishlists').delete().eq('user_id', user.id).eq('product_id', String(id)).then(() => {});
+             } else {
+               supabase.from('wishlists').upsert({ user_id: user.id, product_id: String(id) }, { onConflict: 'user_id,product_id' }).then(() => {});
+             }
+           }
+         },
        clearCart: () => set({ cart: [] }),
        setUser: user => set({ user }),
+// S-03: Unified subscription payment — delegates to canonical initiateSubscriptionPayment
+       // which handles server-side order creation, Razorpay checkout, and state sync
        subscribeWithRazorpay: async (planName: string, amountMonthly: number) => {
-         const { user } = get();
-         if (!user) throw new Error('Login required');
-         const razorpayKeyId = (import.meta as any).env.VITE_RAZORPAY_KEY_ID;
-         const isDev = (import.meta as any).env.DEV;
-         if (!razorpayKeyId || !(window as any).Razorpay) {
-           if (!isDev) {
-             throw new Error('Payment service not configured. Please contact support.');
-           }
-            // P1-FUNC-02: Use update-then-insert (upsert onConflict was broken)
-            const demoExpiry = new Date(Date.now() + 30 * 24 * 3600000).toISOString();
-            const { data: existDemoSub } = await supabase.from('subscriptions')
-              .select('id').eq('user_id', user.id).eq('status', 'active').maybeSingle();
-            if (existDemoSub) {
-              await supabase.from('subscriptions').update({
-                plan_name: planName, status: 'active', amount: amountMonthly,
-                started_at: new Date().toISOString(), expires_at: demoExpiry, payment_method: 'demo',
-              }).eq('id', existDemoSub.id);
-            } else {
-              await supabase.from('subscriptions').insert({
-                user_id: user.id, plan_type: planName, plan_name: planName,
-                status: 'active', amount: amountMonthly,
-                started_at: new Date().toISOString(), expires_at: demoExpiry, payment_method: 'demo',
-              });
-            }
-            await supabase.from('users').update({
-              subscription_plan: planName, subscription_expires_at: demoExpiry,
-            }).eq('id', user.id);
-            set(state => ({ user: state.user ? { ...state.user, subscription_plan: planName } : null }));
-            return;
-         }
-         return new Promise((resolve, reject) => {
-           const options = {
-             key: razorpayKeyId,
-             amount: amountMonthly * 100,
-             currency: 'INR',
-             name: 'BYNDIO',
-             description: `${planName} Plan — Monthly`,
-             handler: async (response: { razorpay_payment_id: string }) => {
-               try {
-                 await supabase.from('subscriptions').upsert({
-                   user_id: user.id,
-                   plan_name: planName,
-                   status: 'active',
-                   amount: amountMonthly,
-                   started_at: new Date().toISOString(),
-                   expires_at: new Date(Date.now() + 30 * 24 * 3600000).toISOString(),
-                   payment_method: 'razorpay',
-                   payment_id: response.razorpay_payment_id,
-                 }, { onConflict: 'user_id' });
-                 await supabase.from('users').update({
-                   subscription_plan: planName,
-                   subscription_expires_at: new Date(Date.now() + 30 * 24 * 3600000).toISOString(),
-                 }).eq('id', user.id);
-                 set(state => ({ user: state.user ? { ...state.user, subscription_plan: planName } : null }));
-                 resolve();
-               } catch (err) { reject(err); }
-             },
-             prefill: { name: user.name, email: user.email },
-             theme: { color: '#0D47A1' },
-             modal: { ondismiss: () => reject(new Error('Payment cancelled')) },
-           };
-           const rzp = new (window as any).Razorpay(options);
-           rzp.on('payment.failed', () => reject(new Error('Payment failed')));
-           rzp.open();
-         });
-       },
+          const { user } = get();
+          if (!user) throw new Error('Login required');
+          
+          const { initiateSubscriptionPayment } = await import('./lib/subscriptionPayment');
+          
+          return new Promise<void>((resolve, reject) => {
+            initiateSubscriptionPayment(
+              { 
+                name: planName, 
+                price: amountMonthly, 
+                priceDisplay: `₹${amountMonthly}/mo`, 
+                role: 'seller' 
+              },
+              { id: user.id, name: user.name || user.email || '', email: user.email || '' },
+              () => resolve(),
+              (msg: string) => reject(new Error(msg))
+            );
+          });
+        },
 
        fetchShippingMethods: async () => {
          try {
@@ -414,7 +463,7 @@ export const useAppStore = create<AppState>()(
        // SECURE ORDER CREATION — Server-side Razorpay flow
        // Flow: Create Razorpay order (server) → Pay (client) → Verify (server) → Create DB order
        // ════════════════════════════════════════════════════════════════
-        createOrder: async (address, paymentMethod, total, platformFee = 10, shippingFee = 0, couponCode) => {
+        createOrder: async (address, paymentMethod, total, platformFee = 10, shippingFee = 0, couponCode, shippingMethodId) => {
          const { user, cart, clearCart, isSubmittingOrder } = get();
          if (isSubmittingOrder) return { success: false, error: 'Order is already being processed. Please wait.' };
          if (!user) return { success: false, error: 'Login required' };
@@ -442,23 +491,24 @@ export const useAppStore = create<AppState>()(
            return { success: false, error: 'Please enter a valid 6-digit PIN code.' };
          }
 
-         const API_BASE = '/.netlify/functions/';
+         const API_BASE = '/.netlify/functions';
 
          // ── C-05: Deterministic idempotency key (prevents duplicate orders) ──
          const cartHash = btoa(JSON.stringify(cart.map(i => i.id + ':' + i.qty).sort()));
          const idempotencyKey = `${user.id}_${cartHash}_${paymentMethod}`;
 
          try {
-           // ── C-02: Server-side validation of order total before proceeding ──
-           // Subtract fees from total to get just the product sum to validate
-           const productTotal = total - platformFee - shippingFee;
+           // ── C-02: Server-side validation of subtotal before proceeding ──
+           const subtotalToVerify = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+           
            const { data: isValidTotal, error: valError } = await supabase.rpc('validate_order_total', {
              p_cart: cart.map(i => ({ id: i.id, qty: i.qty })),
-             p_claimed_total: productTotal
+             p_claimed_total: subtotalToVerify
            });
            
            if (valError || !isValidTotal) {
-             return { success: false, error: 'Price mismatch detected. Please refresh and try again.' };
+             console.error('[createOrder] Validation failed:', valError, { subtotalToVerify });
+             return { success: false, error: 'Price mismatch detected. Please refresh your cart.' };
            }
 
            let paymentId: string | null = null;
@@ -474,7 +524,7 @@ export const useAppStore = create<AppState>()(
                body: JSON.stringify({
                  cartItems: cart.map(i => ({ product_id: i.id, quantity: i.qty })),
                  receipt: `rcpt_${user.id.slice(0,8)}_${Date.now()}`,
-                 shippingMethodId: get().shippingMethodId,
+                 shippingMethodId: shippingMethodId || get().shippingMethodId,
                  couponCode: couponCode,
                  userId: user.id,
                  notes: {
@@ -483,22 +533,70 @@ export const useAppStore = create<AppState>()(
                  }
                }),
              });
-             if (!orderRes.ok) {
-               const errData = await orderRes.json().catch(() => ({}));
-               throw new Error(errData.error || 'Failed to create payment order. Please try again.');
-             }
-             const rzpOrder = await orderRes.json();
-             serverTotal = rzpOrder.serverCalculatedTotal || total;
+              
+              let rzpOrder;
+              if (!orderRes.ok) {
+                const errData = await orderRes.json().catch(() => ({}));
+                if (!errData.error && (import.meta as any).env.DEV) {
+                  console.warn('[BYNDIO] Netlify functions not running (Vite 404). Mocking Razorpay order for local dev.');
+                  rzpOrder = {
+                    orderId: `order_TEST_${Date.now()}`,
+                    amount: total * 100,
+                    serverCalculatedTotal: total
+                  };
+                } else {
+                  throw new Error(errData.error || 'Failed to create payment order. Please try again.');
+                }
+              } else {
+                rzpOrder = await orderRes.json();
+              }
+              
+              let serverTotal = rzpOrder.serverCalculatedTotal || total;
 
-             // Step 2: Open Razorpay checkout modal
+             // Check if this is a test mode order (no real Razorpay secret configured)
+             const isTestOrder = rzpOrder.orderId?.startsWith('order_TEST_');
+
+             // Step 2: Open Razorpay checkout modal (or handle test mode)
              const razorpayKeyId = (import.meta as any).env.VITE_RAZORPAY_KEY_ID;
-             if (!razorpayKeyId || !(window as any).Razorpay) {
+
+             if (isTestOrder) {
+               // Test mode: Skip Razorpay modal, simulate successful payment
+               console.log('[BYNDIO] Test mode payment — Razorpay secret not configured');
+               paymentId = `TEST-PAY-${Date.now()}`;
+               // Auto-verify test payments
+               const verifyRes = await fetch(`${API_BASE}/verify-payment`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                   razorpay_order_id: rzpOrder.orderId,
+                   razorpay_payment_id: paymentId,
+                   razorpay_signature: 'test_signature',
+                 }),
+               });
+               
+               let verifyData;
+               if (!verifyRes.ok) {
+                 const errData = await verifyRes.json().catch(() => ({}));
+                 if (!errData.error && (import.meta as any).env.DEV) {
+                   verifyData = { verified: true };
+                 } else {
+                   throw new Error(errData.error || 'Payment verification failed.');
+                 }
+               } else {
+                 verifyData = await verifyRes.json();
+               }
+               
+               if (!verifyData.verified) {
+                 throw new Error('Payment verification failed.');
+               }
+             } else if (!razorpayKeyId || !(window as any).Razorpay) {
                if ((import.meta as any).env.DEV) {
                  paymentId = `DEMO-${Date.now()}`;
                } else {
                  throw new Error('Payment service is temporarily unavailable. Please try COD or contact support.');
                }
              } else {
+               // Production: Open real Razorpay checkout modal
                const razorpayPromise = new Promise<{
                  razorpay_payment_id: string;
                  razorpay_order_id: string;
@@ -529,7 +627,6 @@ export const useAppStore = create<AppState>()(
                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10 * 60 * 1000))
                ]).catch(async (err) => {
                  if (err.message === 'timeout') {
-                   // Order is not in DB yet, so we just throw to show user message.
                    throw new Error('Payment timed out. Please try again.');
                  }
                  throw err;
@@ -591,14 +688,40 @@ export const useAppStore = create<AppState>()(
               throw orderError;
             }
 
-           // ── Step 5: Create Order Items ──
-           const orderItems = cart.map(item => ({
-             order_id: order.id,
-             product_id: item.id,
-             quantity: item.qty,
-             price: item.price,
-             seller_id: (item as any).seller_id || null,
-           }));
+            // ── Step 5: Calculate Commissions based on Phase-wise Model ──
+            // Get total influencer count to determine phase
+            const { count: influencerCount } = await supabase.from('influencers').select('id', { count: 'exact', head: true });
+            const count = influencerCount || 0;
+            
+            let platformCommRate = 0.01; // Phase 1 (0-1000): 1%
+            if (count >= 1000 && count < 10000) platformCommRate = 0.04; // Phase 2: 4%
+            if (count >= 10000) platformCommRate = 0.075; // Phase 3: 7.5%
+
+            const orderItems = cart.map(item => {
+              const itemTotal = item.price * item.qty;
+              const platformShare = itemTotal * platformCommRate;
+              const remainingBudget = itemTotal - platformShare;
+              
+              // Distribution: Influencer 70% of remaining, Affiliate 20% of remaining (if applicable)
+              // This leaves a buffer or follows the product's defined budget.
+              // For simplicity in this phase, we'll assign the shares based on the presence of IDs.
+              
+              const creatorId = (item as any).creator_id || null;
+              const affiliateCode = (item as any).affiliate_code || null;
+              
+              return {
+                order_id: order.id,
+                product_id: item.id,
+                quantity: item.qty,
+                price: item.price,
+                seller_id: (item as any).seller_id || null,
+                creator_id: creatorId,
+                creator_share: creatorId ? (remainingBudget * 0.15) : 0, // 15% revenue share for influencer
+                affiliate_id: affiliateCode ? affiliateCode : null, // Assuming code maps to user_id for now
+                affiliate_share: affiliateCode ? (remainingBudget * 0.05) : 0, // 5% for affiliate
+                platform_commission: platformShare
+              };
+            });
 
            const { error: itemsError } = await supabase
              .from('order_items')
@@ -668,6 +791,6 @@ export const useAppStore = create<AppState>()(
           }
         },
      }),
-     { name: 'byndio-storage', partialize: state => ({ cart: state.cart, wishlist: state.wishlist, recentlyViewed: state.recentlyViewed }) }
+     { name: 'byndio-storage', partialize: state => ({ cart: state.cart, wishlist: state.wishlist, recentlyViewed: state.recentlyViewed, buyerState: state.buyerState }) }
    )
 );

@@ -28,7 +28,7 @@ export default function Influencer() {
       toastSuccess('Application submitted! Our team will review within 2–3 days.');
       form.reset();
     } catch (err: any) {
-      toastSuccess('Application submitted! Our team will review within 2–3 days.');
+      toast('Failed to submit application: ' + err.message, 'error');
     } finally {
       setSubmitting(false);
     }

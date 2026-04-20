@@ -10,17 +10,25 @@ const supabase = createClient(
 );
 
 exports.handler = async (event) => {
+  const headers = {
+    'Access-Control-Allow-Origin': event.headers['origin'] || '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json',
+  };
+
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { statusCode: 405, headers, body: 'Method Not Allowed' };
   }
   try {
     const { phone, otp } = JSON.parse(event.body);
     if (!phone || !otp) {
-      return { statusCode: 400, body: JSON.stringify({ valid: false, error: 'Phone and OTP are required' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ valid: false, error: 'Phone and OTP are required' }) };
     }
 
     if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
-      return { statusCode: 400, body: JSON.stringify({ valid: false, error: 'OTP must be a 6-digit number' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ valid: false, error: 'OTP must be a 6-digit number' }) };
     }
 
     // Find the latest unverified, non-expired OTP for this phone
@@ -37,7 +45,7 @@ exports.handler = async (event) => {
 
     if (fetchError) {
       console.error('[verify-cod-otp] Fetch error:', fetchError);
-      return { statusCode: 500, body: JSON.stringify({ valid: false, error: 'Verification service error' }) };
+      return { statusCode: 500, headers, body: JSON.stringify({ valid: false, error: 'Verification service error' }) };
     }
 
     if (!otpRecord) {
@@ -52,10 +60,10 @@ exports.handler = async (event) => {
         .maybeSingle();
 
       if (expiredOtp) {
-        return { statusCode: 400, body: JSON.stringify({ valid: false, error: 'OTP has expired. Please request a new one.' }) };
+        return { statusCode: 400, headers, body: JSON.stringify({ valid: false, error: 'OTP has expired. Please request a new one.' }) };
       }
 
-      return { statusCode: 400, body: JSON.stringify({ valid: false, error: 'Invalid OTP. Please check and try again.' }) };
+      return { statusCode: 400, headers, body: JSON.stringify({ valid: false, error: 'Invalid OTP. Please check and try again.' }) };
     }
 
     // Mark OTP as verified (prevents reuse)
@@ -72,9 +80,9 @@ exports.handler = async (event) => {
       .eq('verified', true)
       .then(() => {}).catch(() => {});
 
-    return { statusCode: 200, body: JSON.stringify({ valid: true, message: 'OTP verified successfully' }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ valid: true, message: 'OTP verified successfully' }) };
   } catch (err) {
     console.error('[verify-cod-otp] Error:', err);
-    return { statusCode: 500, body: JSON.stringify({ valid: false, error: 'Verification failed. Please try again.' }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ valid: false, error: 'Verification failed. Please try again.' }) };
   }
 };

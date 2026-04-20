@@ -307,19 +307,19 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
               </div>
             </button>
 
-            <Link to="/notifications" className="hover:bg-white/10 p-1 rounded-full transition-colors relative group text-white">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-[15px] h-[15px] md:w-5 md:h-5 group-hover:scale-105 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+            <Link to="/notifications" className="hover:bg-white/10 p-1.5 rounded-full transition-colors relative group text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 group-hover:scale-105 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
               <span className="absolute top-[3px] right-[3px] w-[4px] h-[4px] bg-[#F50057] rounded-full"></span>
             </Link>
-            <Link to="/wishlist" className="hover:bg-white/10 p-1 rounded-full transition-colors relative group text-white" aria-label="Wishlist">
-              <Heart className="w-[15px] h-[15px] md:w-5 md:h-5 group-hover:scale-105 transition-transform stroke-[2]" />
+            <Link to="/wishlist" className="hover:bg-white/10 p-1.5 rounded-full transition-colors relative group text-white" aria-label="Wishlist">
+              <Heart className="w-5 h-5 group-hover:scale-105 transition-transform stroke-[2]" />
             </Link>
             <button
               onClick={onOpenCart}
-              className="relative hover:bg-white/10 p-1 rounded-full transition-colors group text-white"
+              className="relative hover:bg-white/10 p-1.5 rounded-full transition-colors group text-white"
               aria-label="Cart"
             >
-              <ShoppingCart className="w-[15px] h-[15px] md:w-5 md:h-5 group-hover:scale-105 transition-transform stroke-[2]" />
+              <ShoppingCart className="w-5 h-5 group-hover:scale-105 transition-transform stroke-[2]" />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-0.5 w-[11px] h-[11px] bg-[#F57C00] shadow-sm text-white text-[6px] font-black rounded-full flex items-center justify-center animate-bounce ring-1 ring-[#0D47A1]">
                   {cartCount > 9 ? '9+' : cartCount}

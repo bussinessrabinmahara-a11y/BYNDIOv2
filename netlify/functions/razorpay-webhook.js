@@ -12,7 +12,7 @@ const ALLOWED_ORIGINS = ['https://byndio.in', 'https://www.byndio.in'];
 function getAllowedOrigin(event) {
   const origin = event.headers['origin'] || event.headers['Origin'] || '';
   if (ALLOWED_ORIGINS.includes(origin)) return origin;
-  if (process.env.CONTEXT === 'deploy-preview' || process.env.CONTEXT === 'branch-deploy') return origin;
+  if (process.env.CONTEXT !== 'production') return origin || '*';
   return 'https://byndio.in';
 }
 

@@ -31,11 +31,11 @@ const COUPONS = [
 ];
 
 const FEATURED_SELLERS = [
-  { name: 'StyleHub India',  icon: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200', products: 234, rating: 4.8, followers: '12K', cat: 'Fashion',     tagline: 'Trendy fashion for all' },
-  { name: 'TechZone Store',  icon: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&q=80&w=200', products: 156, rating: 4.9, followers: '8K',  cat: 'Electronics', tagline: 'Latest gadgets & deals' },
-  { name: 'GlamourBox',      icon: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=200', products: 89,  rating: 4.7, followers: '5K',  cat: 'Beauty',      tagline: 'Glow up essentials' },
-  { name: 'KidsParadise',    icon: 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&q=80&w=200', products: 312, rating: 4.8, followers: '9K',  cat: 'Kids',        tagline: 'Fun stuff for little ones' },
-  { name: 'HomeNest',        icon: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=200', products: 178, rating: 4.6, followers: '6K',  cat: 'Home',        tagline: 'Modern home & decor' },
+  { id: 'seller-stylehub', name: 'StyleHub India',  icon: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200', products: 234, rating: 4.8, followers: '12K', cat: 'Fashion',     tagline: 'Trendy fashion for all' },
+  { id: 'seller-techzone', name: 'TechZone Store',  icon: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&q=80&w=200', products: 156, rating: 4.9, followers: '8K',  cat: 'Electronics', tagline: 'Latest gadgets & deals' },
+  { id: 'seller-glamour',  name: 'GlamourBox',      icon: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=200', products: 89,  rating: 4.7, followers: '5K',  cat: 'Beauty',      tagline: 'Glow up essentials' },
+  { id: 'seller-kids',     name: 'KidsParadise',    icon: 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&q=80&w=200', products: 312, rating: 4.8, followers: '9K',  cat: 'Kids',        tagline: 'Fun stuff for little ones' },
+  { id: 'seller-homenest', name: 'HomeNest',        icon: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=200', products: 178, rating: 4.6, followers: '6K',  cat: 'Home',        tagline: 'Modern home & decor' },
 ];
 
 const VIBES = [
@@ -65,7 +65,8 @@ export default function Home() {
 
   const [activeCat,    setActiveCat]    = useState<number|null>(null);
   const [copiedCoupon, setCopiedCoupon] = useState<string|null>(null);
-  const [followed,     setFollowed]     = useState<Set<number>>(new Set());
+  const follows          = useAppStore(s => s.follows);
+  const toggleFollow     = useAppStore(s => s.toggleFollow);
   const [timeLeft,     setTimeLeft]     = useState({ h: 5, m: 23, s: 45 });
 
   useEffect(() => { fetchFlashSales(); }, [fetchFlashSales]);
@@ -111,7 +112,7 @@ export default function Home() {
   const kids        = products.filter(p => (p.category || p.cat) === 'Kids').slice(0, 5);
   const offerProduct= products.find(p => p.mrp > p.price * 1.4) || products[0] || null;
   const creatorPicks= products.filter(p => p.inf).slice(0, 6);
-  const recentProds = products.filter(p => recentlyViewed.includes(p.id)).slice(0, 6);
+  const recentProds = products.filter(p => (recentlyViewed || []).includes(p.id)).slice(0, 6);
 
   const heroTitle   = siteSettings?.hero_title    || 'Shop Beyond Ordinary';
   const heroSubtitle= siteSettings?.hero_subtitle || "0% commission for sellers · 20,000+ creators · India's fairest marketplace.";
@@ -130,11 +131,13 @@ export default function Home() {
     setTimeout(() => setCopiedCoupon(null), 2000);
   };
 
-  const toggleFollow = (i: number) => setFollowed(prev => {
-    const n = new Set(prev);
-    n.has(i) ? n.delete(i) : n.add(i);
-    return n;
-  });
+  const onToggleFollow = (id: string) => {
+    if (!user) {
+      alert('Please login to follow sellers');
+      return;
+    }
+    toggleFollow(id);
+  };
 
   const fmt = (n: number) => String(n).padStart(2, '0');
 
@@ -172,7 +175,7 @@ export default function Home() {
       initial={{ opacity: 0 }} 
       animate={{ opacity: 1 }} 
       exit={{ opacity: 0 }}
-      className="flex flex-col min-h-screen bg-[#F4F6F8]"
+      className="flex flex-col min-h-screen bg-[#F4F6F8] overflow-x-hidden"
     >
       
       {/* ══════════════════ MOBILE UI (< md) ══════════════════ */}
@@ -303,7 +306,7 @@ export default function Home() {
             </h2>
             <Link to="/products" className="text-[11px] text-[#0D47A1] font-bold">View All</Link>
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             {trending.slice(0, 6).map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
@@ -729,9 +732,9 @@ export default function Home() {
                 <div className="text-[9px] md:text-[11px] text-gray-400 font-medium mb-3 md:mb-4 flex flex-col gap-0.5">
                   <span>{seller.products} items • {seller.followers} followers</span>
                 </div>
-                <button onClick={() => toggleFollow(i)}
-                  className={`w-full text-[10px] md:text-[12px] font-black py-1.5 md:py-2 rounded-lg md:rounded-xl transition-all shadow-sm ${followed.has(i) ? 'bg-[#1565C0] text-white' : 'bg-[#EEF2FF] text-[#1565C0]'}`}>
-                  {followed.has(i) ? '✓ Followed' : '+ Follow'}
+                <button onClick={() => onToggleFollow(seller.id)}
+                  className={`w-full text-[10px] md:text-[12px] font-black py-1.5 md:py-2 rounded-lg md:rounded-xl transition-all shadow-sm ${(follows || []).includes(seller.id) ? 'bg-[#1565C0] text-white' : 'bg-[#EEF2FF] text-[#1565C0]'}`}>
+                  {(follows || []).includes(seller.id) ? '✓ Followed' : '+ Follow'}
                 </button>
               </div>
             ))}
@@ -810,7 +813,7 @@ export default function Home() {
       {recentProds.length > 0 && (
         <div className="max-w-7xl mx-auto w-full px-4 py-5">
           <SectionHeader title="🕐 Recently Viewed" link="/products" />
-          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
             {recentProds.map(p => <ProductCard key={p.id} product={p}/>)}
           </div>
         </div>

@@ -24,10 +24,10 @@ export default function Footer() {
         <div className="absolute top-0 right-10 w-96 h-96 bg-white/5 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-10 w-64 h-64 bg-[#F57C00]/20 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="max-w-7xl mx-auto grid grid-cols-3 md:gap-12 relative z-20 items-center">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 relative z-20 items-center">
           
           {/* Column 1: Seller Info */}
-          <div className="flex flex-col items-start pr-2 md:pr-8 border-r border-white/10 h-fit">
+          <div className="flex flex-col items-start pr-2 md:pr-8 border-b md:border-b-0 md:border-r border-white/10 pb-6 md:pb-0 h-fit">
             <span className="inline-block bg-[#F57C00] text-white text-[6px] md:text-[9px] font-black tracking-widest px-1.5 py-[1px] rounded-full mb-1.5 shadow-md uppercase">
               REGISTER
             </span>
@@ -38,7 +38,7 @@ export default function Footer() {
           </div>
 
           {/* Column 2: Benefits Checklist */}
-          <div className="flex flex-col items-start border-r border-white/10 h-fit px-2 md:px-8">
+          <div className="flex flex-col items-start border-b md:border-b-0 md:border-r border-white/10 py-6 md:py-0 px-0 md:px-8 h-fit">
              <h3 className="font-black text-[9px] md:text-[16px] mb-2.5 md:mb-4 uppercase tracking-widest text-white/80">Benefits</h3>
              <div className="flex flex-col gap-2 w-full">
               {['0% Comms','No Stock','Pan India','Fast Pay'].map(f => (
@@ -57,7 +57,7 @@ export default function Footer() {
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            className="flex flex-col items-center md:items-start text-center md:text-left h-fit pl-2 md:pl-8"
+            className="flex flex-col items-center md:items-start text-center md:text-left h-fit pt-6 md:pt-0 pl-0 md:pl-8"
           >
             <div className="mb-2 flex items-center justify-center bg-white/10 rounded-lg p-1.5 backdrop-blur-md border border-white/10 w-fit">
               <Smartphone size={14} className="text-white md:w-7 md:h-7" />
@@ -79,7 +79,7 @@ export default function Footer() {
 
       {/* Standard Complete Footer Links */}
       <div className="bg-[#0A2540] text-blue-100 pt-10 pb-16 md:pt-20 md:pb-8 px-4 md:px-6 relative z-0">
-        <div className="grid grid-cols-4 lg:grid-cols-5 gap-x-2 gap-y-8 md:gap-8 mb-6 md:mb-10 max-w-7xl mx-auto">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-x-4 gap-y-8 md:gap-8 mb-6 md:mb-10 max-w-7xl mx-auto">
           {/* Brand */}
           <div className="col-span-4 lg:col-span-1 border-b border-white/10 pb-4 md:border-0 md:pb-0">
             <div className="text-[16px] md:text-2xl text-white font-black flex items-center gap-1.5 mb-2.5 md:mb-4">

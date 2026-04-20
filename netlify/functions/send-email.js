@@ -5,7 +5,7 @@
 // ================================================================
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL     = process.env.FROM_EMAIL || 'noreply@byndio.in';
+const FROM_EMAIL     = process.env.FROM_EMAIL || 'onboarding@resend.dev';
 const FROM_NAME      = 'BYNDIO';
 const { rateLimit }  = require('./_rateLimit');
 
@@ -36,12 +36,17 @@ function esc(str) {
 }
 
 
-const headers = {
-  'Access-Control-Allow-Origin': process.env.URL || 'https://byndio.in',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
+function getHeaders(event) {
+  const origin = event?.headers?.['origin'] || event?.headers?.['Origin'] || '';
+  const allowed = ['https://byndio.in', 'https://www.byndio.in'];
+  const allowedOrigin = allowed.includes(origin) ? origin : (process.env.CONTEXT !== 'production' ? (origin || '*') : 'https://byndio.in');
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json',
+  };
+}
 
 const templates = {
   order_confirmation: (data) => ({
@@ -381,8 +386,7 @@ async function sendEmail(to, template, data) {
 }
 
 exports.handler = async (event) => {
-  // Use module-level headers (already has correct CORS origin)
-  const hdrs = headers;
+  const hdrs = getHeaders(event);
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: hdrs, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: hdrs, body: JSON.stringify({ error: 'Method not allowed' }) };

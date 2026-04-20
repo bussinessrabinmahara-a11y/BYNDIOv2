@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { toastSuccess, toast } from '../components/Toast';
 import { supabase } from '../lib/supabase';
+import { OrdersSection, WalletSection, AddressSection, SecuritySection, SettingsSection } from './ProfileSections';
 
 export default function Profile() {
   usePageTitle('Account Settings');
@@ -196,22 +197,11 @@ export default function Profile() {
                     </div>
                  )}
 
-                 {activeTab === 'orders' && (
-                    <div className="py-20 flex flex-col items-center text-center">
-                       <div className="w-20 h-20 bg-blue-50 rounded-[32px] flex items-center justify-center text-[#0D47A1] mb-6"><Package size={32}/></div>
-                       <h2 className="text-xl font-black text-gray-900 uppercase">Order Stream</h2>
-                       <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wide mt-2">See your pipeline items</p>
-                       <Link to="/my-orders" className="mt-6 px-10 py-3 bg-[#0D47A1] text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl">Go to Orders</Link>
-                    </div>
-                 )}
-
-                 {(activeTab === 'wallet' || activeTab === 'address' || activeTab === 'settings') && (
-                    <div className="py-20 flex flex-col items-center text-center opacity-50">
-                       <span className="text-4xl mb-4">⚙️</span>
-                       <h2 className="text-[14px] font-black text-gray-900 uppercase tracking-widest">Under Construction</h2>
-                       <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight mt-1 max-w-[200px]">We are fine-tuning this boutique experience for your account.</p>
-                    </div>
-                 )}
+                 {activeTab === 'orders' && <OrdersSection user={activeUser} />}
+                 {activeTab === 'wallet' && <WalletSection user={activeUser} balance={walletBalance} />}
+                 {activeTab === 'address' && <AddressSection user={activeUser} />}
+                 {activeTab === 'security' && <SecuritySection />}
+                 {activeTab === 'settings' && <SettingsSection user={activeUser} updateProfile={updateProfile} />}
 
               </motion.div>
            </AnimatePresence>
@@ -410,14 +400,11 @@ export default function Profile() {
                     </div>
                   )}
 
-                  {activeTab !== 'overview' && (
-                    <div className="py-32 flex flex-col items-center text-center">
-                       <div className="w-24 h-24 bg-blue-50 rounded-[40px] flex items-center justify-center text-[#0D47A1] mb-8 shadow-inner"><Settings size={40} className="animate-spin-slow"/></div>
-                       <h2 className="text-3xl font-black text-gray-900 uppercase tracking-tight">Section Under Refinement</h2>
-                       <p className="text-[14px] text-gray-400 font-bold uppercase tracking-widest mt-4 max-w-md mx-auto leading-relaxed">We are currently fine-tuning this specific dashboard module to provide you with the most premium experience possible.</p>
-                       <button onClick={() => setActiveTab('overview')} className="mt-10 px-12 py-4 bg-[#0D47A1] text-white rounded-2xl font-black text-[12px] uppercase tracking-widest shadow-2xl shadow-blue-900/20 hover:-translate-y-1 transition-transform">Return to Overview</button>
-                    </div>
-                  )}
+                  {activeTab === 'orders' && <OrdersSection user={activeUser} />}
+                  {activeTab === 'wallet' && <WalletSection user={activeUser} balance={walletBalance} />}
+                  {activeTab === 'address' && <AddressSection user={activeUser} />}
+                  {activeTab === 'security' && <SecuritySection />}
+                  {activeTab === 'settings' && <SettingsSection user={activeUser} updateProfile={updateProfile} />}
 
                 </motion.div>
               </AnimatePresence>

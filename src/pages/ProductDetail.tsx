@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '../components/PageWrapper';
 import { supabase } from '../lib/supabase';
+import { toast, toastSuccess } from '../components/Toast';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -31,6 +32,8 @@ export default function ProductDetail() {
   const [selectedSize, setSelectedSize] = useState<string | null>(null); // H-06
   const [selectedColor, setSelectedColor] = useState<string | null>(null); // H-06
   const { user } = useAppStore();
+  const [sellerInfo, setSellerInfo] = useState<{state: string, gst_number: string} | null>(null);
+  const [buyerState, setBuyerState] = useState<string | null>(null);
 
   // L-04: Track recently viewed on mount
   const addRecentlyViewed = useAppStore(s => s.addRecentlyViewed);
@@ -55,7 +58,29 @@ export default function ProductDetail() {
       .then(({ data }) => { 
         if (data) setRealReviews(data); 
       });
+
+    // Fetch Seller info for GST compliance
+    supabase.from('sellers')
+      .select('state, gst_number')
+      .eq('id', product.seller_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setSellerInfo(data);
+      });
   }, [product?.id]);
+
+  // Fetch Buyer's state from default shipping address
+  useEffect(() => {
+    if (!user) return;
+    supabase.from('shipping_addresses')
+      .select('state')
+      .eq('user_id', user.id)
+      .eq('is_default', true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setBuyerState(data.state);
+      });
+  }, [user?.id]);
 
   const avgRating = realReviews.length > 0 
     ? (realReviews.reduce((sum, r) => sum + r.rating, 0) / realReviews.length).toFixed(1)
@@ -263,41 +288,70 @@ export default function ProductDetail() {
                           </div>
                           {seller.isVerified && <CheckCircle2 size={8} className="text-blue-500 ml-auto" />}
                        </div>
+
+                       {/* GST COMPLIANCE INFO */}
+                       {sellerInfo && !sellerInfo.gst_number && (
+                         <div className="p-3 bg-orange-50 border border-orange-100 rounded-lg flex items-start gap-2.5">
+                            <Info size={14} className="text-orange-500 shrink-0 mt-0.5" />
+                            <div className="flex flex-col">
+                               <span className="text-[10px] font-black text-orange-900 uppercase">Intra-State Shipping Only</span>
+                               <span className="text-[9px] text-orange-700 font-bold leading-tight">
+                                 This seller is not GST-registered and can only ship within <span className="underline">{sellerInfo.state}</span>.
+                               </span>
+                            </div>
+                         </div>
+                       )}
                     </div>
 
-                     {/* Actions (Static Layout) */}
-                     <div className="flex flex-col gap-2.5">
-                        <div className="flex gap-2.5">
-                           <button 
-                            onClick={() => {
-                                if (product.cat === 'Fashion' && (!selectedSize || !selectedColor)) {
-                                  alert('Please select a size and color first.');
-                                  return;
-                                }
-                                addToCart({ ...product, metadata: { size: selectedSize || 'Standard', color: selectedColor || 'Original' } } as any, 1);
-                                navigate('/checkout');
-                            }}
-                            disabled={isOutOfStock}
-                            className={`flex-[2] py-3.5 rounded-xl font-black text-[13px] lg:text-[15px] uppercase tracking-widest lg:tracking-[0.15em] transition-all shadow-md active:scale-[0.98] ${isOutOfStock ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white'}`}
-                           >
-                             {isOutOfStock ? 'Sold Out' : 'Buy Now'}
-                           </button>
+                     {/* Actions (Sticky Mobile, Static Desktop) */}
+                     <div className="flex flex-col gap-2.5 fixed bottom-0 left-0 right-0 p-3 bg-white border-t border-gray-100 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] md:static md:p-0 md:bg-transparent md:border-0 md:z-auto md:shadow-none pb-[calc(env(safe-area-inset-bottom)+12px)] md:pb-0">
+                        <div className="flex gap-2.5 max-w-5xl mx-auto w-full">
+                            <button 
+                             onClick={() => {
+                                 if (product.cat === 'Fashion' && (!selectedSize || !selectedColor)) {
+                                   alert('Please select a size and color first.');
+                                   return;
+                                 }
+                                 
+                                 // GST Restriction Check
+                                 if (sellerInfo && !sellerInfo.gst_number && buyerState && buyerState !== sellerInfo.state) {
+                                   toast(`This seller is based in ${sellerInfo.state} and is not GST registered. They can only ship within ${sellerInfo.state}.`, 'error');
+                                   return;
+                                 }
+
+                                 addToCart({ ...product, metadata: { size: selectedSize || 'Standard', color: selectedColor || 'Original' } } as any, 1);
+                                 navigate('/checkout');
+                             }}
+                             disabled={isOutOfStock || !!(sellerInfo && !sellerInfo.gst_number && buyerState && buyerState !== sellerInfo.state)}
+                             className={`flex-[2] py-3.5 rounded-xl font-black text-[13px] lg:text-[15px] uppercase tracking-widest lg:tracking-[0.15em] transition-all shadow-md active:scale-[0.98] ${isOutOfStock || !!(sellerInfo && !sellerInfo.gst_number && buyerState && buyerState !== sellerInfo.state) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white'}`}
+                            >
+                              {isOutOfStock ? 'Sold Out' : (sellerInfo && !sellerInfo.gst_number && buyerState && buyerState !== sellerInfo.state) ? 'Not Available in Your State' : 'Buy Now'}
+                            </button>
                            <button 
                              onClick={() => {
                                if (product.cat === 'Fashion' && (!selectedSize || !selectedColor)) {
                                  alert('Please select a size and color first.');
                                  return;
                                }
+                               
+                               // GST Restriction Check
+                               if (sellerInfo && !sellerInfo.gst_number && buyerState && buyerState !== sellerInfo.state) {
+                                 toast(`Shipping restricted to ${sellerInfo.state} only (GST Compliance).`, 'error');
+                                 return;
+                               }
+
                                addToCart({ ...product, metadata: { size: selectedSize || 'Standard', color: selectedColor || 'Original' } } as any, 1);
+                               toastSuccess('Added to bag!');
                              }}
-                             className="flex-1 border-2 border-gray-900 text-gray-900 py-3 rounded-xl font-black text-[11px] lg:text-[12px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 hover:bg-gray-50 active:scale-[0.98]"
+                             disabled={isOutOfStock || !!(sellerInfo && !sellerInfo.gst_number && buyerState && buyerState !== sellerInfo.state)}
+                             className="flex-1 border-2 border-gray-900 text-gray-900 py-3 rounded-xl font-black text-[11px] lg:text-[12px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 hover:bg-gray-50 active:scale-[0.98] bg-white disabled:opacity-50 disabled:cursor-not-allowed"
                            >
                              <ShoppingBag size={16} /> Bag
                            </button>
                         </div>
-                        <div className="flex items-center justify-center gap-2 py-2 px-4 bg-gray-50/50 rounded-lg text-[10px] font-bold text-gray-500 border border-gray-100/50">
-                           <Truck size={14} /> Estimated Delivery: {getDeliveryRange()}
-                        </div>
+                     </div>
+                     <div className="flex items-center justify-center gap-2 py-2 px-4 bg-gray-50/50 rounded-lg text-[10px] font-bold text-gray-500 border border-gray-100/50 mt-4 md:mt-2 mb-10 md:mb-0">
+                        <Truck size={14} /> Estimated Delivery: {getDeliveryRange()}
                      </div>
 
                     {/* Protection Guarantees (Minimalist Row) */}
