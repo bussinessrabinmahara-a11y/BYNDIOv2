@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePageTitle } from '../lib/usePageTitle';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Copy, Check, TrendingUp, Link as LinkIcon, DollarSign, BarChart2, Star, ExternalLink, Plus, PlayCircle, Clock } from 'lucide-react';
 import VideoFeed from '../components/VideoFeed';
 import { ShortVideo } from '../types';
@@ -262,6 +262,7 @@ function PerformanceRanking({ totalClicks, totalConversions, totalEarnings, conv
 export default function CreatorDashboard() {
   usePageTitle('Creator Dashboard');
   const { user, affiliateLinks, fetchAffiliateLinks, generateAffiliateLink, products, walletBalance, rewardPoints, fetchWalletData } = useAppStore();
+  const navigate = useNavigate();
   const [subscribing, setSubscribing] = useState<string | null>(null);
   const [tab, setTab] = useState('overview');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -575,7 +576,9 @@ export default function CreatorDashboard() {
                   <div className="absolute -top-3 left-3 bg-[#7B1FA2] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">PRO</div>
                   <div className="font-bold text-[13px] mb-1">Instant Payout (1–2% fee)</div>
                   <div className="text-[11px] text-gray-500 mb-3">Get funds in 24–48 hrs. Available for Pro subscribers.</div>
-                  <button className="bg-white text-[#7B1FA2] border-2 border-[#7B1FA2] px-4 py-2 rounded-md text-[12px] font-bold hover:bg-[#F3E5F5] transition-colors">
+                  <button 
+                    onClick={() => navigate('/pricing?role=influencer')}
+                    className="bg-white text-[#7B1FA2] border-2 border-[#7B1FA2] px-4 py-2 rounded-md text-[12px] font-bold hover:bg-[#F3E5F5] transition-colors">
                     Upgrade to Pro
                   </button>
                 </div>

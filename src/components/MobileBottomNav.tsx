@@ -20,7 +20,7 @@ export default function MobileBottomNav() {
   }
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 flex items-center px-0 pb-[env(safe-area-inset-bottom)] z-[100] h-[56px] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-100 flex items-center px-0 pb-[calc(8px+env(safe-area-inset-bottom))] z-[100] min-h-[64px] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
       {navItems.map((item) => {
         const isActive = loc.pathname === item.href || (item.href === '/products' && loc.pathname.includes('/product'));
         const Icon = item.icon;

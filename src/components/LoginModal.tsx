@@ -31,6 +31,8 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const otpIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initAuth = useAppStore(s => s.initAuth);
   const globalRefCode = useAppStore(s => s.referralCode);
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetId = useRef<string | null>(null);
 
   useEffect(() => {
     if (globalRefCode && !referralCode) {
@@ -45,6 +47,52 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
       }
     };
   }, []);
+
+  // Explicitly render Turnstile when modal opens or tab/mode changes
+  useEffect(() => {
+    if (isOpen && authMode === 'login' && turnstileRef.current) {
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      const renderTurnstile = () => {
+        // @ts-ignore
+        if (window.turnstile) {
+          try {
+            // Clear existing if any
+            if (turnstileWidgetId.current) {
+              // @ts-ignore
+              window.turnstile.remove(turnstileWidgetId.current);
+            }
+            // @ts-ignore
+            turnstileWidgetId.current = window.turnstile.render(turnstileRef.current!, {
+              sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA',
+              theme: 'light',
+              size: 'flexible'
+            });
+          } catch (e) {
+            console.error('Turnstile render error:', e);
+          }
+        } else if (attempts < maxAttempts) {
+          attempts++;
+          setTimeout(renderTurnstile, 500); // Retry every 500ms
+        }
+      };
+
+      // Start rendering process
+      renderTurnstile();
+    }
+
+    return () => {
+      // Cleanup on unmount or change
+      if (turnstileWidgetId.current) {
+        try {
+          // @ts-ignore
+          if (window.turnstile) window.turnstile.remove(turnstileWidgetId.current);
+        } catch (e) {}
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, [isOpen, tab, authMode]);
 
   // Removed client-side rate limiting states (C-07, C-09)
   const [countryCode, setCountryCode] = useState('+91'); // L-02
@@ -135,18 +183,44 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const handleVerifyOTP = async () => {
     if (!otpCode.trim() || otpCode.length !== 6) { setError('Enter the 6-digit OTP'); return; }
     setLoading(true); setError(null);
+    const phoneId = `${countryCode}${phone.replace(/\D/g, '')}`;
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     try {
+      // Check rate limit first
+      try {
+        const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: phoneId, action: 'otp_verify', increment: false })
+        });
+        const rlData = await rlRes.json().catch(() => ({}));
+        if (!rlRes.ok || !rlData.allowed) {
+          throw new Error(rlData.error || 'Too many attempts. Please try again later.');
+        }
+      } catch (rlErr: any) {
+        if (isLocalhost) console.warn('[RateLimit] OTP check skipped on localhost');
+        else throw rlErr;
+      }
+
       const { data, error } = await supabase.auth.verifyOtp({
-        phone: `${countryCode}${phone.replace(/\D/g, '')}`,
+        phone: phoneId,
         token: otpCode,
         type: 'sms',
       });
-      if (error) throw error;
+      if (error) {
+        // Increment on failure
+        await fetch('/.netlify/functions/check-rate-limit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: phoneId, action: 'otp_verify', increment: true })
+        }).catch(() => {});
+        throw error;
+      }
       initAuth();
       setSuccess('Verified! Logging you in...');
       setTimeout(onClose, 1000);
     } catch (err: any) {
-      setError('Invalid OTP. Please try again.');
+      setError(err.message || 'Invalid OTP. Please try again.');
     } finally { setLoading(false); }
   };
 
@@ -154,6 +228,24 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     if (!twoFACode.trim() || twoFACode.length !== 6) { setError('Enter the 6-digit code from your authenticator app'); return; }
     setLoading(true); setError(null);
     try {
+      // Check rate limit
+      const identifier = email || 'anonymous_2fa';
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      try {
+        const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, action: '2fa_verify', increment: false })
+        });
+        const rlData = await rlRes.json().catch(() => ({}));
+        if (!rlRes.ok || !rlData.allowed) {
+          throw new Error(rlData.error || 'Too many attempts. Please try again later.');
+        }
+      } catch (rlErr: any) {
+        if (isLocalhost) console.warn('[RateLimit] 2FA check skipped on localhost');
+        else throw rlErr;
+      }
+
       // List factors to get the enrolled TOTP factor
       const { data: factors } = await supabase.auth.mfa.listFactors();
       const totpFactor = factors?.all?.find(f => f.factor_type === 'totp');
@@ -176,7 +268,15 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
         code: twoFACode,
       });
       
-      if (error) throw new Error('Invalid 2FA code. Please try again.');
+      if (error) {
+        // Increment on failure
+        await fetch('/.netlify/functions/check-rate-limit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, action: '2fa_verify', increment: true })
+        }).catch(() => {});
+        throw new Error('Invalid 2FA code. Please try again.');
+      }
       
       setSuccess('2FA verified! Logging you in...');
       initAuth();
@@ -208,14 +308,38 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
       }
 
       // CAPTCHA verification via Netlify function
-      const tsRes = await fetch(`/.netlify/functions/verify-captcha`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ response: turnstileToken }) // Send `response` token
-      });
-      const tsData = await tsRes.json().catch(() => ({}));
-      if (!tsRes.ok || tsData.success !== true) {
-        setError(tsData.error || 'CAPTCHA verification failed. Please try again.');
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const hasKey = !!import.meta.env.VITE_TURNSTILE_SITE_KEY;
+      
+      let captchaPassed = false;
+      
+      if (isLocalhost && !hasKey) {
+        console.warn('[CAPTCHA] Skipping server-side verification on localhost (no key configured)');
+        captchaPassed = true;
+      } else {
+        try {
+          const tsRes = await fetch(`/.netlify/functions/verify-captcha`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ response: turnstileToken })
+          });
+          const tsData = await tsRes.json().catch(() => ({}));
+          if (tsRes.ok && tsData.success === true) {
+            captchaPassed = true;
+          } else {
+            setError(tsData.error || 'CAPTCHA verification failed. Please try again.');
+          }
+        } catch (err) {
+          if (isLocalhost) {
+            console.warn('[CAPTCHA] Function call failed, skipping on localhost');
+            captchaPassed = true;
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      if (!captchaPassed) {
         setLoading(false);
         // @ts-ignore
         if (window.turnstile) window.turnstile.reset();
@@ -223,6 +347,26 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
       }
 
       if (tab === 'register') {
+        // C-07: Server-side signup rate limit check
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        try {
+          const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'signup', increment: false })
+          });
+          const rlData = await rlRes.json().catch(() => ({}));
+          if (!rlRes.ok || !rlData.allowed) {
+            throw new Error(rlData.error || 'Too many attempts. Please try again later.');
+          }
+        } catch (err: any) {
+          if (isLocalhost) {
+            console.warn('[RateLimit] Signup check failed/skipped on localhost');
+          } else {
+            throw err;
+          }
+        }
+
         const { data, error: signUpError } = await supabase.auth.signUp({ 
           email: email.toLowerCase(), 
           password,
@@ -234,6 +378,13 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           }
         });
         if (signUpError) {
+          // Increment attempts on failure
+          await fetch('/.netlify/functions/check-rate-limit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'signup', increment: true })
+          }).catch(() => {});
+          
           if (signUpError.message.toLowerCase().includes('already registered'))
             throw new Error('This email is already registered. Please login instead.');
           throw signUpError;
@@ -277,23 +428,36 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           }
         } else { setSuccess('Please check your email to confirm your account.'); }
       } else {
-        // C-07: Server-side login lockout
-        const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: email.toLowerCase(), action: 'login' })
-        });
-        const rlData = await rlRes.json().catch(() => ({}));
-        if (!rlRes.ok || !rlData.allowed) {
-          throw new Error(rlData.error || 'Too many attempts. Please try again later.');
+        // C-07: Server-side login lockout — Just CHECK first
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        try {
+          const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'login', increment: false })
+          });
+          const rlData = await rlRes.json().catch(() => ({}));
+          if (!rlRes.ok || !rlData.allowed) {
+            throw new Error(rlData.error || 'Too many attempts. Please try again later.');
+          }
+        } catch (err: any) {
+          if (isLocalhost) {
+            console.warn('[RateLimit] Login check failed/skipped on localhost');
+          } else {
+            throw err;
+          }
         }
 
         const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
+          // Increment attempts on failure
+          await fetch('/.netlify/functions/check-rate-limit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'login', increment: true })
+          }).catch(() => {}); // Silent catch for rate limit increment
           throw signInError;
         }
-        
-        // Rate limit reset removed
         
         if (data.user && !data.user.email_confirmed_at) {
           await supabase.auth.signOut();
@@ -498,7 +662,7 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
                 {error && <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-md p-3 text-red-700 text-[12px]"><AlertCircle size={15} className="shrink-0 mt-0.5"/>{error}</div>}
                 {success && <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-md p-3 text-green-700 text-[12px]">✅ {success}</div>}
                 {/* Cloudflare Turnstile CAPTCHA */}
-                <div className="cf-turnstile" data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'} data-theme="light" data-size="flexible" />
+                <div ref={turnstileRef} className="min-h-[65px]" />
 
                 <button type="submit" disabled={loading}
                   className="w-full bg-[#0D47A1] hover:bg-[#1565C0] disabled:bg-gray-400 disabled:cursor-not-allowed text-white p-3 rounded-md text-[14px] font-extrabold transition-colors flex items-center justify-center gap-2">

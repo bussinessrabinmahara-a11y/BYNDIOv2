@@ -239,13 +239,13 @@ export default function Home() {
 
         {/* Categories Section - Individual Container */}
         <div className="bg-white py-3 mb-1 border-b border-gray-50 overflow-hidden">
-          <div className="flex overflow-x-auto gap-5 px-4 scrollbar-hide snap-x items-start">
+          <div className="flex overflow-x-auto gap-1 px-2 scrollbar-hide snap-x items-start">
             {CATEGORIES.map(cat => (
-              <Link key={cat.cat} to={`/products?cat=${cat.cat}`} className="flex flex-col items-center gap-1.5 snap-start shrink-0 group">
+              <Link key={cat.cat} to={`/products?cat=${cat.cat}`} className="flex flex-col items-center gap-1 snap-start shrink-0 group w-[72px]">
                 <div className="w-[32px] h-[32px] rounded-lg flex items-center justify-center transition-all shadow-sm group-active:scale-90" style={{ backgroundColor: cat.bg }}>
                    {React.cloneElement(cat.icon as React.ReactElement, { size: 14, strokeWidth: 2, color: cat.color } as any)}
                 </div>
-                <span className="text-[8px] font-bold text-gray-500 tracking-tight uppercase">{cat.name}</span>
+                <span className="text-[8px] font-bold text-gray-500 tracking-tight uppercase text-center line-clamp-2 px-1 leading-[1.1]">{cat.name}</span>
               </Link>
             ))}
           </div>

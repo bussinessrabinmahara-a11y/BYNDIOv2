@@ -259,9 +259,15 @@ export default function Seller() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agreedTerms) return;
-    setSubmitting(true);
+    if (!user) {
+      toast('Please login to submit an application', 'error');
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const { error } = await supabase.from('seller_applications').insert({
+        user_id:         user.id,
         full_name:       formData.fullName || '',
         email:           formData.email || '',
         phone:           formData.phone || '',
@@ -483,26 +489,7 @@ export default function Seller() {
                           document.getElementById('seller-reg-form')?.scrollIntoView({ behavior: 'smooth' });
                           return;
                         }
-
-                        if (plan.price === '₹0') {
-                           document.getElementById('seller-reg-form')?.scrollIntoView({ behavior: 'smooth' });
-                           return;
-                        }
-                        if (plan.price === 'Custom') {
-                           window.open('mailto:business@byndio.in?subject=Premium%20Plan%20Inquiry&body=Hi%2C%20I%20am%20interested%20in%20the%20Premium%20plan.', '_blank');
-                           return;
-                        }
-                        initiateSubscriptionPayment(
-                          { 
-                            name: plan.name, 
-                            price: parseInt(plan.price.replace('₹', '').replace(',', '')) || 0, 
-                            priceDisplay: plan.price + '/mo', 
-                            role: 'seller' 
-                          },
-                          { id: user.id, name: user.name || user.email || '', email: user.email || '' },
-                          (pName) => { toastSuccess(`🎉 ${pName} plan activated!`); navigate('/seller-dashboard'); },
-                          (msg) => { toast(msg, 'error'); }
-                        );
+                        navigate('/pricing?role=seller');
                       }}
                       className={`w-full py-2.5 rounded-xl text-[9.5px] md:text-[12px] font-black transition-all hover:scale-[1.02] border-2 uppercase tracking-wider ${plan.ctaStyle}`}>
                       {plan.cta}

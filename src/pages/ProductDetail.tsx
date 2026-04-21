@@ -5,50 +5,79 @@ import { usePageTitle } from '../lib/usePageTitle';
 import { useAppStore } from '../store';
 import { 
   ChevronLeft, Share2, Heart, Star, Truck, ShieldCheck, 
-  RotateCcw, Info, ShoppingBag, CheckCircle2, Award, ChevronRight
+  RotateCcw, Info, ShoppingBag, CheckCircle2, Award, ChevronRight, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '../components/PageWrapper';
 import { supabase } from '../lib/supabase';
-import { toast, toastSuccess } from '../components/Toast';
+import { getOptimizedImageUrl } from '../lib/images';
+import { toastSuccess, toastError } from '../components/Toast';
 
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { products, addToCart, toggleWishlist, wishlist } = useAppStore();
-  const product = products.find(p => p.id.toString() === id);
+  const { products: storeProducts, addToCart, toggleWishlist, wishlist, user } = useAppStore();
   
-  usePageTitle(product ? `${product.name} - BYNDIO` : 'Product Not Found');
+  const [product, setProduct] = useState<any>(storeProducts.find(p => p.id.toString() === id));
+  const [loading, setLoading] = useState(!product);
+  
+  usePageTitle(product ? `${product.name} - BYNDIO` : 'Product Detail');
 
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: false });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [pincode, setPincode ] = useState('');
   const [deliveryInfo, setDeliveryInfo] = useState<{days: number, valid: boolean} | null>(null);
-  // H-05: Track real stock status
   const [stockQty, setStockQty] = useState<number | null>(null);
-  // H-06: Real reviews from DB
   const [realReviews, setRealReviews] = useState<any[]>([]);
-  const [hasReviewed, setHasReviewed] = useState(false); // H-05
-  const [selectedSize, setSelectedSize] = useState<string | null>(null); // H-06
-  const [selectedColor, setSelectedColor] = useState<string | null>(null); // H-06
-  const { user } = useAppStore();
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [sellerInfo, setSellerInfo] = useState<{state: string, gst_number: string} | null>(null);
   const [buyerState, setBuyerState] = useState<string | null>(null);
 
   // L-04: Track recently viewed on mount
   const addRecentlyViewed = useAppStore(s => s.addRecentlyViewed);
+  
+  // Fetch product if not in store (allows previewing pending products)
+  useEffect(() => {
+    if (!product && id) {
+      setLoading(true);
+      supabase.from('products').select('*').eq('id', id).maybeSingle()
+        .then(({ data, error }) => {
+          if (data) {
+            // Map DB fields to Store Product fields
+            const mapped = {
+              id: data.id, name: data.name,
+              brand: data.description?.replace('Brand: ', '') || 'Brand',
+              cat: data.category, price: data.price, mrp: data.mrp,
+              icon: data.images?.[0] || '📦',
+              rating: data.rating ?? 4.5, reviews: data.reviews ?? 0,
+              inf: data.is_creator_pick ?? false, creator: data.creator_name,
+              specs: Object.entries(data.specifications || {}) as [string, string][],
+              is_sponsored: data.is_sponsored ?? false,
+              seller_id: data.seller_id,
+              seller_state: data.seller_state || null,
+              seller_has_gst: data.seller_has_gst ?? false,
+              description: data.description,
+              images: data.images
+            };
+            setProduct(mapped);
+          }
+          setLoading(false);
+        });
+    }
+  }, [id, product]);
+
   useEffect(() => {
     if (product) addRecentlyViewed(product.id);
   }, [product?.id]);
 
-  // H-05: Fetch real stock quantity from products table
   useEffect(() => {
     if (!product) return;
     supabase.from('products').select('stock_quantity').eq('id', product.id).single()
       .then(({ data }) => { if (data) setStockQty(data.stock_quantity); });
   }, [product?.id]);
 
-  // H-06: Fetch real reviews joined with users
   useEffect(() => {
     if (!product) return;
     supabase.from('reviews')
@@ -59,7 +88,6 @@ export default function ProductDetail() {
         if (data) setRealReviews(data); 
       });
 
-    // Fetch Seller info for GST compliance
     supabase.from('sellers')
       .select('state, gst_number')
       .eq('id', product.seller_id)
@@ -69,7 +97,6 @@ export default function ProductDetail() {
       });
   }, [product?.id]);
 
-  // Fetch Buyer's state from default shipping address
   useEffect(() => {
     if (!user) return;
     supabase.from('shipping_addresses')
@@ -81,6 +108,58 @@ export default function ProductDetail() {
         if (data) setBuyerState(data.state);
       });
   }, [user?.id]);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+  useEffect(() => {
+    if (user && product) {
+      supabase.from('reviews').select('id').eq('product_id', product.id).eq('user_id', user.id).maybeSingle()
+        .then(({ data }) => { if (data) setHasReviewed(true); });
+    }
+  }, [user?.id, product?.id]);
+
+  const handleSubmitReview = async () => {
+    if (!user) return;
+    if (!newReview.comment.trim()) {
+      alert('Please write a comment');
+      return;
+    }
+    setIsSubmittingReview(true);
+    try {
+      console.log('Submitting review for product:', product.id, 'User:', user.id);
+      const { error } = await supabase.from('reviews').insert({
+        product_id: product.id,
+        user_id: user.id,
+        user_name: user.name,
+        rating: newReview.rating,
+        comment: newReview.comment.trim(),
+      });
+      
+      if (error) {
+        console.error('Supabase Review Error:', error);
+        toastError(error.message || 'Failed to submit review');
+        return;
+      }
+
+      toastSuccess('Review posted successfully!');
+      setIsReviewModalOpen(false);
+      setHasReviewed(true);
+      setNewReview({ rating: 5, comment: '' });
+      
+      // Refresh reviews
+      const { data } = await supabase.from('reviews')
+        .select('*, users(full_name, avatar_url)')
+        .eq('product_id', product.id)
+        .order('created_at', { ascending: false });
+      if (data) setRealReviews(data);
+    } catch (err) {
+      console.error('Unexpected Review Error:', err);
+      toastError('An unexpected error occurred');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   const avgRating = realReviews.length > 0 
     ? (realReviews.reduce((sum, r) => sum + r.rating, 0) / realReviews.length).toFixed(1)
@@ -101,6 +180,10 @@ export default function ProductDetail() {
     emblaApi.on('reInit', onSelect);
     return () => { emblaApi.off('select', onSelect); };
   }, [emblaApi, onSelect]);
+
+  if (loading) {
+    return <div className="min-h-[60vh] flex items-center justify-center"><div className="w-10 h-10 border-4 border-[#0D47A1] border-t-transparent rounded-full animate-spin"></div></div>;
+  }
 
   if (!product) {
     return (
@@ -171,7 +254,7 @@ export default function ProductDetail() {
                        <div className="flex h-full">
                           {images.map((img, i) => (
                             <div key={i} className="flex-[0_0_100%] min-w-0 h-full flex items-center justify-center p-4 md:p-8">
-                               <img src={img} className="max-w-full max-h-full object-contain drop-shadow-2xl" alt="product" />
+                               <img src={getOptimizedImageUrl(img, 800, 1000)} className="max-w-full max-h-full object-contain drop-shadow-2xl" alt="product" />
                             </div>
                           ))}
                        </div>
@@ -388,13 +471,13 @@ export default function ProductDetail() {
                      <div className="flex text-[#F5A623] gap-0.5">
                         {[...Array(5)].map((_, i) => <Star key={i} size={14} className="fill-current" />)}
                      </div>
-                     <span className="text-[12px] font-black text-gray-900">{product.rating} / 5.0</span>
-                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">• Based on {product.reviews} reviews</span>
+                     <span className="text-[12px] font-black text-gray-900">{avgRating} / 5.0</span>
+                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">• Based on {realReviews.length || product.reviews} reviews</span>
                   </div>
                </div>
                {hasReviewed ? (
-                 <div className="px-4 py-2 bg-green-50 text-green-700 text-[10px] font-black uppercase rounded-lg border border-green-100">
-                   You have already reviewed this product
+                 <div className="px-4 py-2 bg-green-50 text-green-700 text-[10px] font-black uppercase rounded-lg border border-green-100 flex items-center gap-2">
+                   <CheckCircle2 size={12} /> You have already reviewed this product
                  </div>
                ) : (
                  <button 
@@ -403,8 +486,7 @@ export default function ProductDetail() {
                        const event = new CustomEvent('open-login');
                        document.dispatchEvent(event);
                      } else {
-                       // Review form logic handled in separate component or session
-                       alert('Review form opening...');
+                       setIsReviewModalOpen(true);
                      }
                    }}
                    className="w-fit bg-gray-50 border border-gray-200 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all active:scale-95"
@@ -413,6 +495,62 @@ export default function ProductDetail() {
                  </button>
                )}
             </div>
+
+            {/* Review Modal */}
+            <AnimatePresence>
+              {isReviewModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-white w-full max-w-md rounded-[24px] overflow-hidden shadow-2xl"
+                  >
+                    <div className="p-6">
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-black text-gray-900 uppercase">Write a Review</h3>
+                        <button onClick={() => setIsReviewModalOpen(false)} className="text-gray-400 hover:text-black transition-colors"><X size={20} /></button>
+                      </div>
+                      
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3">Rating</label>
+                          <div className="flex gap-2">
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <button 
+                                key={star} 
+                                onClick={() => setNewReview(prev => ({ ...prev, rating: star }))}
+                                className={`transition-all ${newReview.rating >= star ? 'text-[#F5A623]' : 'text-gray-200'}`}
+                              >
+                                <Star size={28} className={newReview.rating >= star ? 'fill-current' : ''} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Your Experience</label>
+                          <textarea 
+                            value={newReview.comment}
+                            onChange={e => setNewReview(prev => ({ ...prev, comment: e.target.value }))}
+                            placeholder="How was the product? Quality, fit, etc."
+                            className="w-full h-32 p-4 bg-gray-50 border border-gray-100 rounded-xl text-[14px] outline-none focus:border-[#0D47A1] focus:bg-white transition-all resize-none"
+                          />
+                        </div>
+                        
+                        <button 
+                          onClick={handleSubmitReview}
+                          disabled={isSubmittingReview}
+                          className="w-full bg-[#0D47A1] text-white py-4 rounded-xl font-black text-[13px] uppercase tracking-widest shadow-lg hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-50"
+                        >
+                          {isSubmittingReview ? 'Submitting...' : 'Post Review'}
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {/* H-06: Real reviews fetched from DB */}

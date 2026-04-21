@@ -46,9 +46,15 @@ export interface SiteSettings {
   contact_email: string;
   contact_phone: string;
   contact_address: string;
+  whatsapp_number: string;
+  twitter_url: string;
+  instagram_url: string;
+  facebook_url: string;
+  youtube_url: string;
   platform_fee: number;
   standard_shipping_fee: number;
   free_shipping_threshold: number;
+  influencer_phase: number;
 }
 
 export interface Order {

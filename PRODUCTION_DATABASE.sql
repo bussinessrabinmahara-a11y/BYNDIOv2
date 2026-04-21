@@ -217,13 +217,16 @@ CREATE TABLE IF NOT EXISTS public.seller_applications (
     phone TEXT NOT NULL,
     business_name TEXT,
     business_state TEXT,
+    state TEXT,
     category TEXT,
     has_gst BOOLEAN,
     gst_number TEXT,
     pan_number TEXT,
+    aadhaar_number TEXT,
     bank_account TEXT,
     ifsc_code TEXT,
     kyc_documents TEXT[] DEFAULT '{}',
+    role TEXT DEFAULT 'seller',
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
     created_at TIMESTAMPTZ DEFAULT timezone('utc',now()) NOT NULL
 );

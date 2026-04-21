@@ -10,43 +10,69 @@ import {
 import PageWrapper from '../components/PageWrapper';
 import ProductCard from '../components/ProductCard';
 
-const CATEGORIES = [
-  { name: 'Fashion', icon: <ShoppingBag size={24} />, color: 'text-pink-600', bg: 'bg-pink-50' },
-  { name: 'Electronics', icon: <Laptop size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' },
-  { name: 'Beauty', icon: <Sparkles size={24} />, color: 'text-purple-600', bg: 'bg-purple-50' },
-  { name: 'Kids', icon: <Baby size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' },
-  { name: 'Home Decor', icon: <Home size={24} />, color: 'text-cyan-600', bg: 'bg-cyan-50' },
-  { name: 'Sports', icon: <Dumbbell size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-];
-
 export default function Categories() {
   usePageTitle('Shop by Category - BYNDIO');
+  const [dbCategories, setDbCategories] = useState<any[]>([]);
   const [productsByCategory, setProductsByCategory] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
 
+  const getIcon = (name: string) => {
+    const n = name.toLowerCase();
+    if (n.includes('fashion') || n.includes('cloth')) return { icon: <ShoppingBag size={24} />, color: 'text-pink-600', bg: 'bg-pink-50' };
+    if (n.includes('elect') || n.includes('tech')) return { icon: <Laptop size={24} />, color: 'text-blue-600', bg: 'bg-blue-50' };
+    if (n.includes('beauty') || n.includes('care')) return { icon: <Sparkles size={24} />, color: 'text-purple-600', bg: 'bg-purple-50' };
+    if (n.includes('kid') || n.includes('baby')) return { icon: <Baby size={24} />, color: 'text-orange-600', bg: 'bg-orange-50' };
+    if (n.includes('home') || n.includes('decor')) return { icon: <Home size={24} />, color: 'text-cyan-600', bg: 'bg-cyan-50' };
+    if (n.includes('sport') || n.includes('fit')) return { icon: <Dumbbell size={24} />, color: 'text-emerald-600', bg: 'bg-emerald-50' };
+    return { icon: <ShoppingBag size={24} />, color: 'text-gray-600', bg: 'bg-gray-50' };
+  };
+
   useEffect(() => {
-    async function loadProducts() {
-      const { data } = await supabase.from('products').select('*').limit(200);
-      if (data) {
-        const grouped: Record<string, any[]> = {};
-        CATEGORIES.forEach(c => grouped[c.name] = []);
-        data.forEach(p => {
-          CATEGORIES.forEach(c => {
-            if (p.category && p.category.includes(c.name)) {
-              grouped[c.name].push({
-                ...p, // Transform DB row to match ProductCard props if needed
-                rating: p.rating || 4.5,
-                reviews: p.reviews || 120,
-                cat: c.name, // Give it a general category for icon fallback
-              });
+    async function loadData() {
+      setLoading(true);
+      try {
+        // Fetch products and extract unique categories
+        const { data } = await supabase.from('products').select('*').eq('is_active', true).eq('approval_status', 'approved');
+        if (data) {
+          const uniqueCatNames = [...new Set(data.map(p => p.category).filter(Boolean))];
+          const cats = uniqueCatNames.map(name => ({
+            name,
+            ...getIcon(name)
+          }));
+          setDbCategories(cats);
+
+          // Map DB fields to Product interface
+          const mappedProducts = data.map((p: any) => ({
+            ...p,
+            cat: p.category || '',
+            icon: p.images?.[0] || p.icon || '📦',
+            rating: p.avg_rating ?? p.rating ?? 4.5,
+            reviews: p.review_count ?? p.reviews ?? 0,
+            mrp: p.mrp || p.price,
+            brand: p.brand || p.description?.replace('Brand: ', '') || '',
+            inf: p.is_creator_pick ?? p.inf ?? false,
+            creator: p.creator_name || p.creator || null,
+            specs: p.specifications ? Object.entries(p.specifications) : (p.specs || []),
+            seller_state: p.seller_state || null,
+            seller_has_gst: p.seller_has_gst ?? false,
+          }));
+
+          const grouped: Record<string, any[]> = {};
+          cats.forEach(c => grouped[c.name] = []);
+          mappedProducts.forEach((p: any) => {
+            if (p.category && grouped[p.category]) {
+              grouped[p.category].push(p);
             }
           });
-        });
-        setProductsByCategory(grouped);
+          setProductsByCategory(grouped);
+        }
+      } catch (err) {
+        console.error('Error loading categories:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
-    loadProducts();
+    loadData();
   }, []);
 
   return (
@@ -70,7 +96,7 @@ export default function Categories() {
              <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#0D47A1] border-t-transparent"></div>
              </div>
-          ) : CATEGORIES.map((cat, i) => (
+          ) : dbCategories.map((cat, i) => (
             <motion.div 
                key={cat.name}
                initial={{ opacity: 0, y: 30 }}

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Search, Heart, User, ShoppingCart, MapPin, Mic, ChevronDown } from 'lucide-react';
 import { useAppStore } from '../store';
+import { supabase } from '../lib/supabase';
 import LocationPicker from './LocationPicker';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CATEGORIES_DATA } from '../data/categories';
@@ -38,10 +39,12 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
     { href: '/seller', label: 'Sell' },
     { href: '/affiliate', label: 'Affiliate' },
     { href: '/flash-sales', label: 'Flash Sales' },
+    { href: '/contact', label: 'Contact Us' },
   ];
 
   const [isListening, setIsListening] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,20 +78,54 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
     recognition.onend = () => setIsListening(false);
   };
 
-  const updateSuggestions = (query: string) => {
+  // Real-time DB search suggestions with debounce
+  const updateSuggestions = useCallback((query: string) => {
     setSearchQuery(query);
-    if (query.length > 1) {
-      const allSuggestions = ['Electronics', 'Mobile Phones', 'Mens Fashion', 'Home Decor', 'Beauty Products', 'Summer Collection', 'Smart Watches', 'Byndio Originals'];
-      setSuggestions(allSuggestions.filter(s => s.toLowerCase().includes(query.toLowerCase())));
-    } else {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+
+    if (query.length < 2) {
       setSuggestions([]);
+      return;
     }
-  };
+
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const { data } = await supabase
+          .from('products')
+          .select('name, category, brand')
+          .eq('is_active', true)
+          .or(`name.ilike.%${query}%,brand.ilike.%${query}%,category.ilike.%${query}%`)
+          .limit(8);
+
+        if (data && data.length > 0) {
+          // Deduplicate and prioritize name matches
+          const names = data.map(p => p.name);
+          const categories = [...new Set(data.map(p => p.category).filter(Boolean))];
+          const combined = [...new Set([...names, ...categories])].slice(0, 7);
+          setSuggestions(combined);
+        } else {
+          // Fallback: match against local CATEGORIES_DATA names
+          const catMatches = CATEGORIES_DATA
+            .filter(c => c.name.toLowerCase().includes(query.toLowerCase()))
+            .map(c => c.name)
+            .slice(0, 4);
+          setSuggestions(catMatches.length > 0 ? catMatches : []);
+        }
+      } catch {
+        // Fallback to local categories on error
+        const catMatches = CATEGORIES_DATA
+          .filter(c => c.name.toLowerCase().includes(query.toLowerCase()))
+          .map(c => c.name)
+          .slice(0, 4);
+        setSuggestions(catMatches);
+      }
+    }, 250); // 250ms debounce
+  }, []);
 
   return (
-    <nav className="sticky top-0 z-50 bg-[#0D47A1]/95 backdrop-blur-md text-white shadow-sm md:shadow-lg border-b border-white/5 h-[44px] md:h-[64px]">
+    <nav className="fixed top-0 left-0 right-0 z-[100] bg-[#0D47A1]/95 backdrop-blur-md text-white shadow-sm md:shadow-lg border-b border-white/5 pt-[env(safe-area-inset-top)]">
       <div className="w-full px-2.5 md:px-6">
-        <div className="flex items-center justify-between h-[44px] md:h-[64px]">
+        <div className="flex items-center justify-between h-[44px] md:h-[60px]">
           
           {/* LOGO - Scaled Down Perfectly to Left Edge */}
           <motion.div 
@@ -96,8 +133,8 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
             animate={{ opacity: 1 }}
             className="flex items-center"
           >
-            <Link to="/" className="shrink-0 flex items-center group -ml-1 md:ml-2 w-[90px] h-[32px] md:w-[145px] md:h-[48px] relative z-20">
-              <div className="transition-transform duration-300 w-full h-full flex items-center origin-left scale-[0.35] md:scale-[0.58] group-hover:scale-[0.37] md:group-hover:scale-[0.61]">
+            <Link to="/" className="shrink-0 flex items-center group -ml-1 md:ml-2 w-[90px] h-[32px] md:w-[130px] md:h-[42px] relative z-20">
+              <div className="transition-transform duration-300 w-full h-full flex items-center origin-left scale-[0.35] md:scale-[0.52] group-hover:scale-[0.37] md:group-hover:scale-[0.55]">
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '250px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{
@@ -163,9 +200,9 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
           </motion.div>
 
           {/* MAIN NAVIGATION DESKTOP */}
-          <div className="hidden lg:flex items-center gap-7 lg:gap-8 ml-6">
+          <div className="hidden lg:flex items-center gap-4 xl:gap-6 ml-4 xl:ml-8">
             {/* Categories Mega Dropdown */}
-            <div className="relative group/mega h-[64px] flex items-center">
+            <div className="relative group/mega h-[60px] flex items-center">
               <button
                 className={`text-[12px] font-medium uppercase tracking-wide transition-all duration-300 relative group flex items-center gap-1
                   ${loc.pathname === '/categories' ? 'text-white' : 'text-blue-100 hover:text-white'}
@@ -177,7 +214,7 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
               </button>
 
               {/* Mega Menu Content */}
-              <div className="absolute top-[64px] left-0 w-[1000px] bg-white text-gray-900 rounded-b-2xl shadow-2xl border-t border-gray-100 opacity-0 invisible group-hover/mega:opacity-100 group-hover/mega:visible transition-all duration-300 z-[100] grid grid-cols-4 p-6 gap-6 origin-top transform scale-95 group-hover/mega:scale-100">
+              <div className="absolute top-[60px] left-0 w-[1000px] bg-white text-gray-900 rounded-b-2xl shadow-2xl border-t border-gray-100 opacity-0 invisible group-hover/mega:opacity-100 group-hover/mega:visible transition-all duration-300 z-[100] grid grid-cols-4 p-6 gap-6 origin-top transform scale-95 group-hover/mega:scale-100">
                 <div className="col-span-1 border-r border-gray-100 pr-6 overflow-y-auto max-h-[500px] scrollbar-hide">
                   <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">BYNDIO Categories</div>
                   {CATEGORIES_DATA.map((cat) => (
@@ -227,12 +264,13 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
               </div>
             </div>
 
-            {navLinks.slice(1).map(link => (
+            {navLinks.slice(1).map((link, idx) => (
               <Link
                 key={link.href}
                 to={link.href}
                 className={`text-[12px] font-medium uppercase tracking-wide transition-all duration-300 relative group
                   ${loc.pathname === link.href ? 'text-white' : 'text-blue-100 hover:text-white'}
+                  ${idx > 2 ? 'hidden 2xl:block' : ''}
                 `}
               >
                 {link.label}
@@ -242,7 +280,7 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
           </div>
 
           {/* SEARCH BAR */}
-          <form onSubmit={handleSearch} className="hidden md:flex items-center flex-1 max-w-[500px] xl:max-w-[580px] px-6 lg:px-8">
+          <form onSubmit={handleSearch} className="hidden md:flex items-center flex-[2] min-w-[300px] max-w-[800px] px-4 xl:px-12">
             <div className="relative w-full flex items-center bg-white/10 hover:bg-white/15 border border-white/20 rounded-lg transition-colors backdrop-blur-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/70" />
               <input
@@ -290,7 +328,7 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
           </form>
 
           {/* RIGHT ICONS & LOCATION */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 xl:gap-3 shrink-0">
             
             {/* Location Picker Button */}
             <button 
@@ -327,7 +365,7 @@ export default function Navbar({ onOpenCart, onOpenLogin }: NavbarProps) {
               )}
             </button>
             {user ? (
-              <Link to="/profile" className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-lg transition-all ml-1 group shadow-sm">
+              <Link to="/profile" className="hidden sm:flex items-center gap-2 px-2 py-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/10 rounded-lg transition-all ml-0.5 xl:ml-1 group shadow-sm">
                 <div className="flex flex-col items-end leading-none">
                   <span className="text-[11px] font-extrabold group-hover:text-blue-200 transition-colors line-clamp-1">{user.name}</span>
                   <span className="text-[8px] font-black text-[#FFCA28] uppercase tracking-[0.05em] mt-0.5 opacity-90">{user.role}</span>

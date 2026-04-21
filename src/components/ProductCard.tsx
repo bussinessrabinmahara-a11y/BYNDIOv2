@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Heart, ShoppingCart, Check, Star, Plus, MapPin, AlertTriangle } from 'lucide-react';
 import { Product, useAppStore } from '../store';
 import { canSellerShipToState, getShippingBadge } from '../lib/gstCompliance';
+import { getOptimizedImageUrl } from '../lib/images';
 import { toast } from './Toast';
 
 export default function ProductCard({ product }: { product: Product }) {
@@ -56,7 +57,7 @@ export default function ProductCard({ product }: { product: Product }) {
         {/* Aspect Ratio Image Container */}
         <div className="aspect-square md:aspect-[3/4] bg-white relative overflow-hidden group/img">
           <img
-            src={product.icon}
+            src={getOptimizedImageUrl(product.icon, 400, 500)}
             alt={product.name}
             className="w-full h-full object-contain p-2 transition-transform duration-700 group-hover/img:scale-110"
             loading="lazy"
@@ -68,7 +69,9 @@ export default function ProductCard({ product }: { product: Product }) {
                   'Kids': 'https://images.unsplash.com/photo-1515488442805-95967f7e81dd?w=400&q=80',
                   'Sports': 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=400&q=80'
                 };
-                (e.target as HTMLImageElement).src = fallbacks[product.cat] || 'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=400&q=80'; 
+                const catKey = product.category || product.cat || '';
+                const matchedKey = Object.keys(fallbacks).find(k => catKey.toLowerCase().includes(k.toLowerCase()));
+                (e.target as HTMLImageElement).src = (matchedKey ? fallbacks[matchedKey] : null) || 'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=400&q=80'; 
             }}
           />
           

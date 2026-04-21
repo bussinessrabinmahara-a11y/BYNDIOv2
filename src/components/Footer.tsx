@@ -96,9 +96,11 @@ export default function Footer() {
             {/* Social Links */}
             <div className="flex gap-2 items-center">
               {[
-                { href: 'https://instagram.com/byndio.official', label: 'Instagram', icon: <Instagram size={14} /> },
-                { href: 'https://youtube.com/@byndio', label: 'YouTube', icon: <Youtube size={14} /> },
-                { href: 'https://twitter.com/byndio', label: 'Twitter', icon: <Twitter size={14} /> }
+                { href: siteSettings?.instagram_url || 'https://instagram.com/byndio.official', label: 'Instagram', icon: <Instagram size={14} /> },
+                { href: siteSettings?.youtube_url || 'https://youtube.com/@byndio', label: 'YouTube', icon: <Youtube size={14} /> },
+                { href: siteSettings?.twitter_url || 'https://twitter.com/byndio', label: 'Twitter', icon: <Twitter size={14} /> },
+                { href: siteSettings?.facebook_url || 'https://facebook.com/byndio', label: 'Facebook', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg> },
+                ...(siteSettings?.whatsapp_number ? [{ href: `https://wa.me/${siteSettings.whatsapp_number.replace(/\D/g, '')}`, label: 'WhatsApp', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg> }] : [])
               ].map((s, i) => (
                 <a key={i} href={s.href} target="_blank" rel="noopener noreferrer" aria-label={s.label} className="w-8 h-8 bg-white/5 hover:bg-[#1565C0] rounded-full flex items-center justify-center transition-colors">
                   {s.icon}
@@ -126,9 +128,9 @@ export default function Footer() {
           <div className="flex flex-col">
             <h4 className="text-[9px] md:text-[13px] text-white font-black uppercase tracking-widest mb-2.5 md:mb-5 h-7 md:h-auto flex items-center">Contact</h4>
             <div className="flex flex-col gap-2 md:gap-3 text-[10px] md:text-[13px] text-blue-200/80">
-              <span className="flex items-center gap-1.5"><Mail size={10} className="shrink-0" /><span className="truncate">Email</span></span>
-              <span className="flex items-center gap-1.5"><Phone size={10} className="shrink-0" /><span className="truncate">Call</span></span>
-              <span className="flex items-center gap-1.5"><MapPin size={10} className="shrink-0" /><span className="truncate">Mumbai</span></span>
+              <Link to="/contact" className="flex items-center gap-1.5 hover:text-white transition-colors"><Mail size={10} className="shrink-0" /><span className="truncate">Email Support</span></Link>
+              <Link to="/contact" className="flex items-center gap-1.5 hover:text-white transition-colors"><Phone size={10} className="shrink-0" /><span className="truncate">Toll Free Call</span></Link>
+              <Link to="/contact" className="flex items-center gap-1.5 hover:text-white transition-colors"><MapPin size={10} className="shrink-0" /><span className="truncate">Visit Office</span></Link>
             </div>
           </div>
         </div>

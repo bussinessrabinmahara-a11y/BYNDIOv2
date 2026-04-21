@@ -10,6 +10,17 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
   
   try {
+    const plans = {
+      // Seller Plans
+      'Free': 0,
+      'Starter': 499,
+      'Pro': 1999,
+      'Premium': 4999,
+      // Influencer Plans
+      'Basic': 0,
+      'Influencer Pro': 999
+    };
+    
     const { 
       paymentId, 
       paymentSignature, 

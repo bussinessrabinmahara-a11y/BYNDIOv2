@@ -865,6 +865,165 @@ function PopupManager() {
   );
 }
 
+// ================================================================
+// SUBSCRIPTION REQUESTS — Verify manual payments
+// ================================================================
+function SubscriptionRequestsPanel() {
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from('subscription_requests')
+      .select('*, users(full_name, email)')
+      .order('created_at', { ascending: false });
+    if (data) setRequests(data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const approveRequest = async (id: string) => {
+    if (!window.confirm('Approve this subscription? User will be upgraded immediately.')) return;
+    setProcessing(id);
+    try {
+      const { data: { user: admin } } = await supabase.auth.getUser();
+      const { error } = await supabase.rpc('approve_subscription_request', {
+        request_id: id,
+        admin_id: admin?.id,
+        notes: 'Approved via Admin Panel'
+      });
+      if (error) throw error;
+      toastSuccess('Subscription approved and activated!');
+      load();
+    } catch (err: any) {
+      toast('Approval failed: ' + err.message, 'error');
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const rejectRequest = async (id: string) => {
+    const reason = window.prompt('Reason for rejection:');
+    if (reason === null) return;
+    setProcessing(id);
+    try {
+      const { error } = await supabase
+        .from('subscription_requests')
+        .update({ status: 'rejected', admin_notes: reason })
+        .eq('id', id);
+      if (error) throw error;
+      toastSuccess('Subscription rejected');
+      load();
+    } catch (err: any) {
+      toast('Rejection failed: ' + err.message, 'error');
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-[#0D47A1]">💎 Subscription Requests</h2>
+          <p className="text-[12px] text-gray-500">Verify and approve manual subscription payments.</p>
+        </div>
+        <button onClick={load} className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="bg-gray-50 text-[11px] font-bold text-gray-500 uppercase border-b border-gray-200">
+              <th className="p-4 text-left">User</th>
+              <th className="p-4 text-left">Plan Details</th>
+              <th className="p-4 text-left">Payment Info</th>
+              <th className="p-4 text-left">Proof</th>
+              <th className="p-4 text-left">Status</th>
+              <th className="p-4 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={6} className="p-12 text-center text-gray-400">Loading requests...</td></tr>
+            ) : requests.length === 0 ? (
+              <tr><td colSpan={6} className="p-12 text-center text-gray-400">No subscription requests found</td></tr>
+            ) : requests.map(req => (
+              <tr key={req.id} className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
+                <td className="p-4">
+                  <div className="font-bold text-gray-900">{req.users?.full_name || 'Unknown'}</div>
+                  <div className="text-[11px] text-gray-400">{req.users?.email}</div>
+                </td>
+                <td className="p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 uppercase">{req.plan_name}</span>
+                    <span className="text-[10px] font-bold text-gray-400 capitalize">{req.plan_role}</span>
+                  </div>
+                  <div className="text-[13px] font-black text-gray-900 mt-1">₹{req.amount?.toLocaleString()}</div>
+                </td>
+                <td className="p-4">
+                  <div className="text-[11px] font-bold text-gray-600 uppercase tracking-tight">{req.payment_method}</div>
+                  <div className="text-[11px] text-blue-600 font-black mt-0.5">{req.transaction_id || 'No ID provided'}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{new Date(req.created_at).toLocaleString('en-IN')}</div>
+                </td>
+                <td className="p-4">
+                  {req.payment_proof_url ? (
+                    <a href={req.payment_proof_url} target="_blank" rel="noopener noreferrer" className="group relative block w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
+                      <img src={req.payment_proof_url} alt="Proof" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Eye size={14} className="text-white" />
+                      </div>
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-gray-400 font-bold italic">No attachment</span>
+                  )}
+                </td>
+                <td className="p-4">
+                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${statusColor(req.status)}`}>
+                    {req.status}
+                  </span>
+                </td>
+                <td className="p-4">
+                  {req.status === 'pending' && (
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => approveRequest(req.id)}
+                        disabled={!!processing}
+                        className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50"
+                        title="Approve"
+                      >
+                        {processing === req.id ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                      </button>
+                      <button 
+                        onClick={() => rejectRequest(req.id)}
+                        disabled={!!processing}
+                        className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50"
+                        title="Reject"
+                      >
+                        {processing === req.id ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                      </button>
+                    </div>
+                  )}
+                  {req.status !== 'pending' && req.admin_notes && (
+                    <div className="text-[10px] text-gray-400 max-w-[150px] truncate" title={req.admin_notes}>
+                      Note: {req.admin_notes}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function UserManager() {
   const [tab, setTab] = useState<'seller' | 'buyer' | 'influencer'>('seller');
   const [users, setUsers] = useState<any[]>([]);
@@ -1657,7 +1816,19 @@ function CouponManager() {
 // ================================================================
 function SiteSettingsManager() {
   const fetchSiteSettings = useAppStore(s => s.fetchSiteSettings);
-  const [settings, setSettings] = useState({ hero_title: '', hero_subtitle: '', footer_about: '', contact_email: '', contact_phone: '', contact_address: '' });
+  const [settings, setSettings] = useState({ 
+    hero_title: '', 
+    hero_subtitle: '', 
+    footer_about: '', 
+    contact_email: '', 
+    contact_phone: '', 
+    contact_address: '',
+    whatsapp_number: '',
+    twitter_url: '',
+    instagram_url: '',
+    facebook_url: '',
+    youtube_url: ''
+  });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1674,50 +1845,81 @@ function SiteSettingsManager() {
   };
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-6 pb-20">
+      <div className="flex items-center justify-between">
         <h2 className="text-xl font-black text-[#0D47A1]">⚙️ Site Settings</h2>
         <button onClick={save} disabled={saving}
-          className="flex items-center gap-1.5 bg-[#0D47A1] text-white px-4 py-2 rounded-lg text-[12px] font-bold hover:bg-[#1565C0] disabled:opacity-50">
-          <Save size={14} /> {saving ? 'Saving…' : 'Save All'}
+          className="flex items-center gap-1.5 bg-[#0D47A1] text-white px-6 py-2.5 rounded-xl text-[13px] font-bold hover:bg-[#1565C0] shadow-sm transition-all disabled:opacity-50">
+          <Save size={16} /> {saving ? 'Saving…' : 'Save All Settings'}
         </button>
       </div>
-      <div className="grid grid-cols-1 gap-4">
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <h3 className="font-black text-[14px] mb-4">🏠 Homepage Content</h3>
-          <div className="flex flex-col gap-3">
+
+      <div className="grid grid-cols-1 gap-6">
+        {/* Homepage Content */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="font-black text-[15px] mb-4 flex items-center gap-2 text-gray-800">
+            <LayoutTemplate size={18} className="text-[#0D47A1]" /> Homepage Hero Section
+          </h3>
+          <div className="space-y-4">
             {[
-              { label: 'Hero Title', field: 'hero_title', placeholder: 'Shop Beyond Ordinary' },
-              { label: 'Hero Subtitle', field: 'hero_subtitle', placeholder: 'India\'s 0% commission marketplace…', multiline: true },
+              { label: 'Hero Main Title', field: 'hero_title', placeholder: 'Shop Beyond Ordinary' },
+              { label: 'Hero Subtitle / Promo Text', field: 'hero_subtitle', placeholder: 'India\'s 0% commission marketplace…', multiline: true },
             ].map(f => (
               <div key={f.field}>
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">{f.label}</label>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5 ml-1">{f.label}</label>
                 {f.multiline
                   ? <textarea value={(settings as any)[f.field]} onChange={e => setSettings(s => ({ ...s, [f.field]: e.target.value }))}
                     placeholder={f.placeholder} rows={3}
-                    className="w-full p-2.5 border border-gray-300 rounded-lg text-[13px] outline-none focus:border-[#1565C0] resize-none" />
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[#1565C0] focus:bg-white transition-all resize-none" />
                   : <input value={(settings as any)[f.field]} onChange={e => setSettings(s => ({ ...s, [f.field]: e.target.value }))}
                     placeholder={f.placeholder}
-                    className="w-full p-2.5 border border-gray-300 rounded-lg text-[13px] outline-none focus:border-[#1565C0]" />
+                    className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[#1565C0] focus:bg-white transition-all" />
                 }
               </div>
             ))}
           </div>
         </div>
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <h3 className="font-black text-[14px] mb-4">📞 Contact Info</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+        {/* Contact Info */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="font-black text-[15px] mb-4 flex items-center gap-2 text-gray-800">
+            <Mail size={18} className="text-[#0D47A1]" /> Contact Information
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
               { label: 'Support Email', field: 'contact_email', placeholder: 'support@byndio.in' },
               { label: 'Support Phone', field: 'contact_phone', placeholder: '1800-BYNDIO' },
-              { label: 'Address', field: 'contact_address', placeholder: 'Mumbai, Maharashtra, India' },
+              { label: 'Business Address', field: 'contact_address', placeholder: 'Mumbai, Maharashtra, India' },
               { label: 'Footer About Text', field: 'footer_about', placeholder: 'India\'s 0% commission marketplace…' },
             ].map(f => (
               <div key={f.field}>
-                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wide block mb-1">{f.label}</label>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5 ml-1">{f.label}</label>
                 <input value={(settings as any)[f.field]} onChange={e => setSettings(s => ({ ...s, [f.field]: e.target.value }))}
                   placeholder={f.placeholder}
-                  className="w-full p-2.5 border border-gray-300 rounded-lg text-[13px] outline-none focus:border-[#1565C0]" />
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[#1565C0] focus:bg-white transition-all" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Social Links */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="font-black text-[15px] mb-4 flex items-center gap-2 text-gray-800">
+            <MessageSquare size={18} className="text-[#0D47A1]" /> Social Media & Messenger
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[
+              { label: 'WhatsApp Number (with country code)', field: 'whatsapp_number', placeholder: '919876543210' },
+              { label: 'Instagram URL', field: 'instagram_url', placeholder: 'https://instagram.com/byndio' },
+              { label: 'Twitter (X) URL', field: 'twitter_url', placeholder: 'https://twitter.com/byndio' },
+              { label: 'Facebook URL', field: 'facebook_url', placeholder: 'https://facebook.com/byndio' },
+              { label: 'YouTube URL', field: 'youtube_url', placeholder: 'https://youtube.com/@byndio' },
+            ].map(f => (
+              <div key={f.field}>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5 ml-1">{f.label}</label>
+                <input value={(settings as any)[f.field]} onChange={e => setSettings(s => ({ ...s, [f.field]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-[#1565C0] focus:bg-white transition-all" />
               </div>
             ))}
           </div>
@@ -2011,6 +2213,132 @@ function AnalyticsPanel() {
   );
 }
 
+// ================================================================
+// INFLUENCER REVENUE MODEL — Phase management
+// ================================================================
+function InfluencerModelManager() {
+  const siteSettings = useAppStore(s => s.siteSettings);
+  const fetchSiteSettings = useAppStore(s => s.fetchSiteSettings);
+  const [tiers, setTiers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('influencer_revenue_tiers').select('*').order('phase', { ascending: true });
+    if (data) setTiers(data);
+    setLoading(false);
+  };
+
+  const updatePhase = async (phase: number) => {
+    setSaving(true);
+    const { error } = await supabase.from('site_settings').update({ influencer_phase: phase }).eq('id', 1);
+    if (!error) {
+      toastSuccess(`Platform moved to Phase ${phase}`);
+      fetchSiteSettings();
+    }
+    setSaving(false);
+  };
+
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto mb-2" /> Loading Model...</div>;
+
+  const currentPhase = siteSettings?.influencer_phase || 1;
+
+  return (
+    <div className="space-y-6 pb-20">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-[#0D47A1]">🤳 Influencer Revenue Model</h2>
+          <p className="text-[12px] text-gray-500 mt-1">Manage platform growth phases and creator monetization strategies.</p>
+        </div>
+        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100">
+          <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Current Status</span>
+          <span className="bg-[#0D47A1] text-white px-3 py-1 rounded-full text-[12px] font-black">PHASE {currentPhase}</span>
+        </div>
+      </div>
+
+      {/* Phase Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {tiers.map((t) => (
+          <div key={t.phase} className={`relative p-6 rounded-2xl border-2 transition-all ${currentPhase === t.phase ? 'bg-white border-[#0D47A1] shadow-xl scale-[1.02] z-10' : 'bg-gray-50 border-transparent opacity-70 hover:opacity-100'}`}>
+            {currentPhase === t.phase && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#0D47A1] text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">Active Now</div>
+            )}
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-2xl font-black text-gray-900">Phase {t.phase}</div>
+              <div className={`p-2 rounded-lg ${t.phase === 1 ? 'bg-green-100 text-green-600' : t.phase === 2 ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                {t.phase === 1 ? <TrendingUp size={20} /> : t.phase === 2 ? <DollarSign size={20} /> : <Zap size={20} />}
+              </div>
+            </div>
+            
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 font-medium">Platform Comm.</span>
+                <span className="font-black text-gray-900">{t.platform_commission_pct}%</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 font-medium">Influencer Share</span>
+                <span className="font-black text-green-600">{t.influencer_share_pct}%</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 font-medium">Brand Collab Fee</span>
+                <span className="font-black text-gray-900">{t.brand_collab_fee_pct}%</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-6">
+               <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Benefits & Rules</div>
+               {[
+                 { label: 'Free Storefront', active: t.phase === 1 },
+                 { label: 'Verified Badges', active: t.has_paid_badges ? 'Paid' : 'Free' },
+                 { label: 'Visibility Boost', active: t.phase < 3 ? 'Free' : 'Pro Only' },
+                 { label: 'Subscription', active: t.has_subscriptions ? 'Required' : 'None' }
+               ].map((b, idx) => (
+                 <div key={idx} className="flex items-center gap-2 text-[11px] font-bold text-gray-700">
+                   <div className={`w-1.5 h-1.5 rounded-full ${b.active === 'Required' || b.active === 'Paid' ? 'bg-orange-500' : 'bg-green-500'}`} />
+                   {b.label}: <span className="ml-auto text-gray-400">{b.active === true ? 'Yes' : b.active === false ? 'No' : b.active}</span>
+                 </div>
+               ))}
+            </div>
+
+            <button 
+              disabled={saving || currentPhase === t.phase}
+              onClick={() => updatePhase(t.phase)}
+              className={`w-full py-2.5 rounded-xl text-[12px] font-black transition-all ${currentPhase === t.phase ? 'bg-gray-100 text-gray-400 cursor-default' : 'bg-white border border-[#0D47A1] text-[#0D47A1] hover:bg-[#0D47A1] hover:text-white shadow-sm active:scale-95'}`}
+            >
+              {currentPhase === t.phase ? 'Current Phase' : `Switch to Phase ${t.phase}`}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Model Strategy Note */}
+      <div className="bg-gradient-to-r from-[#0D47A1] to-[#1565C0] p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl translate-x-1/2 -translate-y-1/2" />
+        <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+          <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shrink-0 border border-white/20">
+            <Award size={40} />
+          </div>
+          <div className="flex-1 text-center md:text-left">
+            <h3 className="text-xl font-black mb-2">Growth First Strategy</h3>
+            <p className="text-blue-100 text-sm leading-relaxed opacity-90">
+              "First help creators earn → then grow → then monetize." This model automatically balances the platform's revenue needs with creator acquisition. As our influencer base scales, the platform commission naturally increases to support the ecosystem.
+            </p>
+          </div>
+          <div className="flex flex-col items-center gap-1 bg-white/10 backdrop-blur-sm px-6 py-4 rounded-2xl border border-white/10">
+            <div className="text-3xl font-black">0%</div>
+            <div className="text-[10px] font-black uppercase tracking-widest opacity-60 text-center">Entry Commission</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function KYCReviewPanel() {
   const [kycs, setKycs] = useState<any[]>([]);
   const [sellers, setSellers] = useState<any[]>([]);
@@ -2039,13 +2367,18 @@ function KYCReviewPanel() {
     setLoading(true);
     try {
       // Fetch General KYCs
-      const { data: general } = await supabase.from('kyc_submissions').select('*, users(full_name, email)').eq('status', filter).order('submitted_at', { ascending: false });
+      const { data: general, error: genErr } = await supabase.from('kyc_submissions').select('*, users(full_name, email)').eq('status', filter).order('submitted_at', { ascending: false });
+      if (genErr) throw genErr;
       if (general) setKycs(general);
 
       // Fetch Seller KYCs (using 'submitted' matches our dashboard logic)
       const sellerFilter = filter === 'pending' ? 'submitted' : filter;
-      const { data: s } = await supabase.from('sellers').select('*, users(full_name, email)').eq('kyc_status', sellerFilter).order('id', { ascending: false });
+      const { data: s, error: selErr } = await supabase.from('sellers').select('*, users(full_name, email)').eq('kyc_status', sellerFilter).order('id', { ascending: false });
+      if (selErr) throw selErr;
       if (s) setSellers(s);
+    } catch (err: any) {
+      toast('Sync Error: ' + err.message, 'error');
+      console.error('KYC Fetch Error:', err);
     } finally {
       setLoading(false);
     }
@@ -2069,7 +2402,10 @@ function KYCReviewPanel() {
     }).eq('id', id);
     if (!error) {
       if (status === 'approved') {
+        sendEmail(userEmail, 'kyc_approved', { name: userName });
         await supabase.from('notifications').insert({ user_id: id, type: 'kyc', title: '🚀 Store Approved!', message: 'Your seller KYC is approved. You can now list products.', action_url: '/seller-dashboard' });
+      } else {
+        // Option to send rejection email with reason if needed
       }
       fetchKYCs();
       toastSuccess(`Seller ${status}`);
@@ -3256,6 +3592,94 @@ function RevenueDashboard() {
   );
 }
 
+// ================================================================
+// SUBSCRIPTION MANAGER
+// ================================================================
+function SubscriptionManager() {
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('subscriptions').select('*, users(full_name, email)').order('created_at', { ascending: false });
+    if (data) setSubscriptions(data);
+    setLoading(false);
+  };
+
+  const updateStatus = async (id: string, status: string) => {
+    const { error } = await supabase.from('subscriptions').update({ status }).eq('id', id);
+    if (!error) {
+      toastSuccess('Status updated');
+      load();
+    } else {
+      toast('Update failed: ' + error.message, 'error');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-black text-[#0D47A1] flex items-center gap-2"><Award className="w-6 h-6" /> Subscriptions</h2>
+        <button onClick={load} className="p-2 text-gray-400 hover:text-[#0D47A1] hover:bg-gray-100 rounded-lg">
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px]">
+            <thead className="bg-gray-50 text-[11px] font-bold text-gray-400 uppercase border-b border-gray-100">
+              <tr>
+                <th className="px-5 py-3">User</th>
+                <th className="px-5 py-3">Plan</th>
+                <th className="px-5 py-3">Role</th>
+                <th className="px-5 py-3">Amount</th>
+                <th className="px-5 py-3">Payment ID</th>
+                <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} className="p-6 text-center text-gray-400">Loading subscriptions...</td></tr>
+              ) : subscriptions.length === 0 ? (
+                <tr><td colSpan={7} className="p-10 text-center text-gray-400">No subscriptions found</td></tr>
+              ) : subscriptions.map(sub => (
+                <tr key={sub.id} className="border-t border-gray-50 hover:bg-gray-50">
+                  <td className="px-5 py-4">
+                    <div className="font-bold text-gray-900">{sub.users?.full_name || 'Unknown'}</div>
+                    <div className="text-[11px] text-gray-500">{sub.users?.email}</div>
+                  </td>
+                  <td className="px-5 py-4 font-black text-[#1565C0] capitalize">{sub.plan_name}</td>
+                  <td className="px-5 py-4 text-gray-600 capitalize">{sub.plan_role}</td>
+                  <td className="px-5 py-4 font-bold text-green-600">₹{sub.amount}</td>
+                  <td className="px-5 py-4 text-[11px] text-gray-500 font-mono">{sub.payment_id}</td>
+                  <td className="px-5 py-4">
+                    <select
+                      value={sub.status}
+                      onChange={e => updateStatus(sub.id, e.target.value)}
+                      className={`text-[10px] font-bold px-2 py-1 rounded-lg outline-none ${
+                        sub.status === 'active' ? 'bg-green-100 text-green-700' :
+                        sub.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <option value="active">Active</option>
+                      <option value="cancelled">Cancelled</option>
+                      <option value="expired">Expired</option>
+                    </select>
+                  </td>
+                  <td className="px-5 py-4 text-[11px] text-gray-500">{new Date(sub.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   usePageTitle('Admin Panel');
   const { user } = useAppStore();
@@ -3265,6 +3689,7 @@ export default function Admin() {
   const [pendingCount, setPendingCount] = useState(0);
   const [kycCount, setKycCount] = useState(0);
   const [returnCount, setReturnCount] = useState(0);
+  const [subRequestCount, setSubRequestCount] = useState(0);
 
   // Load badge counts for sidebar
   const refreshAll = useCallback(() => {
@@ -3273,10 +3698,14 @@ export default function Admin() {
       supabase.from('kyc_submissions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       supabase.from('sellers').select('id', { count: 'exact', head: true }).eq('kyc_status', 'submitted'),
       supabase.from('return_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    ]).then(([p, k, s, r]) => {
+      supabase.from('subscription_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    ]).then(([p, k, s, r, sub]) => {
       setPendingCount(p.count || 0);
       setKycCount((k.count || 0) + (s.count || 0));
       setReturnCount(r.count || 0);
+      setSubRequestCount(sub.count || 0);
+    }).catch(err => {
+      toast('Sync failed: ' + err.message, 'error');
     });
   }, []);
 
@@ -3294,6 +3723,10 @@ export default function Admin() {
           toastSuccess(`📝 New KYC Submission: ${payload.new.business_name}`);
           refreshAll();
         }
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'subscription_requests' }, (payload) => {
+        toastSuccess(`💎 New Subscription Request!`);
+        refreshAll();
       })
       .subscribe();
 
@@ -3335,6 +3768,8 @@ export default function Admin() {
       items: [
         { id: 'users', icon: Users, label: 'Users', badge: 0 },
         { id: 'applications', icon: Star, label: 'Applications', badge: 0 },
+        { id: 'sub_requests', icon: Shield, label: 'Plan Verification', badge: subRequestCount },
+        { id: 'subscriptions', icon: Award, label: 'Active Plans', badge: 0 },
         { id: 'popups', icon: Zap, label: 'Offers & Popups', badge: 0 },
       ]
     },
@@ -3349,6 +3784,7 @@ export default function Admin() {
       title: 'Platform',
       items: [
         { id: 'settings', icon: Globe, label: 'Site Settings', badge: 0 },
+        { id: 'influencer_model', icon: TrendingUp, label: 'Influencer Model', badge: 0 },
         { id: 'security', icon: Activity, label: 'Fraud Monitoring', badge: 0 },
         { id: 'compliance', icon: Shield, label: 'GST Compliance', badge: 0 },
       ]
@@ -3372,10 +3808,13 @@ export default function Admin() {
       case 'returns': return <ReturnsPanel />;
       case 'users': return <UserManager />;
       case 'applications': return <ApplicationsPanel />;
+      case 'sub_requests': return <SubscriptionRequestsPanel />;
+      case 'subscriptions': return <SubscriptionManager />;
       case 'popups': return <PopupManager />;
       case 'email': return <EmailManager />;
       case 'notify': return <NotificationManager />;
       case 'settings': return <SiteSettingsManager />;
+      case 'influencer_model': return <InfluencerModelManager />;
       case 'security': return <SecurityPanel />;
       case 'compliance': return <CompliancePanel />;
       case 'revenue': return <RevenueDashboard />;

@@ -111,6 +111,14 @@ export default function Profile() {
              <button onClick={() => logout()} className="w-10 h-10 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-xl flex items-center justify-center active:scale-90 transition-all">
                 <LogOut size={16} />
              </button>
+             {(activeUser.role === 'admin' || activeUser.role === 'seller' || activeUser.role === 'influencer') && (
+                <Link 
+                  to={activeUser.role === 'admin' ? '/admin' : activeUser.role === 'seller' ? '/seller-dashboard' : '/influencer-dashboard'} 
+                  className="w-10 h-10 bg-white/20 backdrop-blur-md border border-white/30 text-white rounded-xl flex items-center justify-center active:scale-90 transition-all ml-2"
+                >
+                   <LayoutDashboard size={18} />
+                </Link>
+             )}
           </div>
         </div>
 
@@ -193,6 +201,27 @@ export default function Profile() {
                              </div>
                              <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-900 transition-colors" />
                           </Link>
+
+                          {/* Dynamic Dashboard Quick Link */}
+                          {(activeUser.role === 'admin' || activeUser.role === 'seller' || activeUser.role === 'influencer') && (
+                            <Link 
+                              to={activeUser.role === 'admin' ? '/admin' : activeUser.role === 'seller' ? '/seller-dashboard' : '/influencer-dashboard'} 
+                              className="p-5 bg-gradient-to-br from-gray-900 to-black rounded-[28px] border border-white/10 flex items-center justify-between group shadow-xl mt-4"
+                            >
+                              <div className="flex items-center gap-4">
+                                 <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+                                    <LayoutDashboard size={20}/>
+                                 </div>
+                                 <div>
+                                    <p className="text-[13px] font-black text-white leading-none mb-1">
+                                      {activeUser.role === 'admin' ? 'Admin Panel' : activeUser.role === 'seller' ? 'Seller Dashboard' : 'Influencer Hub'}
+                                    </p>
+                                    <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Manage your {activeUser.role} operations</p>
+                                 </div>
+                              </div>
+                              <ArrowUpRight size={18} className="text-blue-400 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                            </Link>
+                          )}
                        </div>
                     </div>
                  )}
@@ -243,12 +272,22 @@ export default function Profile() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-4">
-              {activeUser.role === 'admin' && (
-                <Link to="/admin" className="flex items-center gap-2.5 px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all backdrop-blur-sm">
-                  <LayoutDashboard size={20} /> Control Panel
-                </Link>
-              )}
+              <div className="flex gap-4">
+                {activeUser.role === 'admin' && (
+                  <Link to="/admin" className="flex items-center gap-2.5 px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all backdrop-blur-sm">
+                    <LayoutDashboard size={20} /> Control Panel
+                  </Link>
+                )}
+                {activeUser.role === 'seller' && (
+                  <Link to="/seller-dashboard" className="flex items-center gap-2.5 px-8 py-3 bg-[#E65100] hover:bg-[#F57C00] border border-white/20 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all shadow-xl shadow-orange-900/20">
+                    <LayoutDashboard size={20} /> Seller Dashboard
+                  </Link>
+                )}
+                {activeUser.role === 'influencer' && (
+                  <Link to="/influencer-dashboard" className="flex items-center gap-2.5 px-8 py-3 bg-[#7B1FA2] hover:bg-[#8E24AA] border border-white/20 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all shadow-xl shadow-purple-900/20">
+                    <LayoutDashboard size={20} /> Influencer Hub
+                  </Link>
+                )}
               <button onClick={() => logout()} className="flex items-center gap-2.5 px-8 py-3 bg-red-500 hover:bg-red-600 rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all shadow-xl shadow-red-900/20">
                 <LogOut size={20} /> Log Out
               </button>

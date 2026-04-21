@@ -11,14 +11,14 @@ exports.handler = async (event) => {
   }
   
   try {
-    const { identifier, action } = JSON.parse(event.body);
+    const { identifier, action, increment = true } = JSON.parse(event.body);
     if (!identifier || !action) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing identifier or action' }) };
     }
 
-    // Set limits based on action
-    const maxAttempts = action === 'login' ? 5 : 3;
-    const lockDurationMins = action === 'login' ? 15 : 10;
+    // Set limits based on user request: 15 attempts, 1 minute lock
+    const maxAttempts = 15;
+    const lockDurationMins = 1;
     
     // Fetch rate limit record
     let { data: rlRecord, error: rlError } = await supabase
@@ -33,25 +33,39 @@ exports.handler = async (event) => {
     if (rlRecord) {
       // Check if currently locked
       if (rlRecord.locked_until && new Date(rlRecord.locked_until) > now) {
+        const remainingMs = new Date(rlRecord.locked_until).getTime() - now.getTime();
+        const remainingSecs = Math.ceil(remainingMs / 1000);
         return { 
           statusCode: 429, 
           body: JSON.stringify({ 
             allowed: false, 
-            error: `Too many attempts. Please try again after ${Math.ceil((new Date(rlRecord.locked_until).getTime() - now.getTime()) / 60000)} minutes.` 
+            error: `Too many attempts. Please try again in ${remainingSecs} seconds.` 
           }) 
         };
       }
       
       // If lock has expired, reset attempts
       if (rlRecord.locked_until && new Date(rlRecord.locked_until) <= now) {
-        await supabase
-          .from('rate_limits')
-          .update({ attempts: 1, locked_until: null, updated_at: now.toISOString() })
-          .eq('id', rlRecord.id);
+        if (increment) {
+          await supabase
+            .from('rate_limits')
+            .update({ attempts: 1, locked_until: null, updated_at: now.toISOString() })
+            .eq('id', rlRecord.id);
+        } else {
+          // Just reset but don't count an attempt yet
+          await supabase
+            .from('rate_limits')
+            .update({ attempts: 0, locked_until: null, updated_at: now.toISOString() })
+            .eq('id', rlRecord.id);
+        }
           
-        return { statusCode: 200, body: JSON.stringify({ allowed: true }) };
+        return { statusCode: 200, body: JSON.stringify({ allowed: true, attempts: increment ? 1 : 0 }) };
       }
       
+      if (!increment) {
+        return { statusCode: 200, body: JSON.stringify({ allowed: true, attempts: rlRecord.attempts }) };
+      }
+
       // Increment attempts
       const newAttempts = rlRecord.attempts + 1;
       let updateData = { attempts: newAttempts, updated_at: now.toISOString() };
@@ -70,7 +84,7 @@ exports.handler = async (event) => {
           statusCode: 429, 
           body: JSON.stringify({ 
             allowed: false, 
-            error: `Too many attempts. Please try again after ${lockDurationMins} minutes.` 
+            error: `Too many attempts. Please try again after 1 minute.` 
           }) 
         };
       } else {
@@ -79,20 +93,22 @@ exports.handler = async (event) => {
           .update(updateData)
           .eq('id', rlRecord.id);
           
-        return { statusCode: 200, body: JSON.stringify({ allowed: true }) };
+        return { statusCode: 200, body: JSON.stringify({ allowed: true, attempts: newAttempts }) };
       }
     } else {
       // Create new record
-      await supabase
-        .from('rate_limits')
-        .insert({
-          identifier,
-          action,
-          attempts: 1,
-          updated_at: now.toISOString()
-        });
+      if (increment) {
+        await supabase
+          .from('rate_limits')
+          .insert({
+            identifier,
+            action,
+            attempts: 1,
+            updated_at: now.toISOString()
+          });
+      }
         
-      return { statusCode: 200, body: JSON.stringify({ allowed: true }) };
+      return { statusCode: 200, body: JSON.stringify({ allowed: true, attempts: increment ? 1 : 0 }) };
     }
   } catch (err) {
     console.error('[check-rate-limit] Error:', err);

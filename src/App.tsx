@@ -56,6 +56,9 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Legal = lazy(() => import('./pages/Legal'));
 const Categories = lazy(() => import('./pages/Categories'));
 const Cart = lazy(() => import('./pages/Cart'));
+const Pricing = lazy(() => import('./pages/Pricing'));
+const SubscriptionCheckout = lazy(() => import('./pages/SubscriptionCheckout'));
+const Contact = lazy(() => import('./pages/Contact'));
 
 import MobileBottomNav from './components/MobileBottomNav';
 
@@ -114,9 +117,9 @@ const AppContent = () => {
   }, [location.search]);
 
   return (
-    <div className="flex flex-col min-h-screen font-sans text-[#212121]">
+    <div className="flex flex-col min-h-[100dvh] font-sans text-[#212121]">
       <Navbar onOpenCart={() => setIsCartOpen(true)} onOpenLogin={() => setIsLoginOpen(true)} />
-      <main className="flex-1 flex flex-col pb-[60px] lg:pb-0">
+      <main className="flex-1 flex flex-col pt-[44px] md:pt-[64px] pb-[76px] lg:pb-0">
         <AnimatePresence mode="wait" initial={false}>
           <Suspense fallback={<PageLoader />}>
             <Routes location={location} key={location.pathname}>
@@ -142,6 +145,9 @@ const AppContent = () => {
             <Route path="/videos" element={<Videos />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/cart" element={<Cart />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/subscription-checkout" element={<ProtectedRoute><SubscriptionCheckout /></ProtectedRoute>} />
+            <Route path="/contact" element={<Contact />} />
 
             {/* Auth required */}
             <Route path="/checkout" element={<ProtectedRoute><ErrorBoundary><Checkout /></ErrorBoundary></ProtectedRoute>} />
@@ -181,9 +187,9 @@ const AppContent = () => {
       <CookieConsent />
 
       {/* WhatsApp Support Button */}
-      {siteSettings?.contact_phone && (
+      {(siteSettings?.whatsapp_number || siteSettings?.contact_phone) && (
         <a
-          href={`https://wa.me/91${siteSettings.contact_phone.replace(/\D/g, '').slice(-10)}?text=Hi%2C%20I%20need%20help%20with%20BYNDIO`}
+          href={`https://wa.me/${(siteSettings?.whatsapp_number || siteSettings?.contact_phone || '').replace(/\D/g, '').length === 10 ? '91' : ''}${(siteSettings?.whatsapp_number || siteSettings?.contact_phone || '').replace(/\D/g, '')}?text=Hi%2C%20I%20need%20help%20with%20BYNDIO`}
           target="_blank"
           rel="noopener noreferrer"
           title="Chat with us on WhatsApp"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { usePageTitle } from '../lib/usePageTitle';
 import { useSearchParams, Link } from 'react-router-dom';
 import { SlidersHorizontal, X } from 'lucide-react';
@@ -7,12 +7,14 @@ import { useAppStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '../components/PageWrapper';
+import { CATEGORIES_DATA } from '../data/categories';
 
 export default function Products() {
   usePageTitle('Browse Products');
   const [searchParams] = useSearchParams();
   const query = searchParams.get('search') || searchParams.get('q') || '';
   const catParam = searchParams.get('cat') || '';
+  const subParam = searchParams.get('sub') || '';
   const refCode = searchParams.get('ref') || '';
   const { products: storeProducts } = useAppStore();
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -52,7 +54,7 @@ export default function Products() {
     }
   }, [refCode]);
 
-  const [cats, setCats] = useState<string[]>(['Fashion', 'Electronics', 'Beauty', 'Kids', 'Sports']);
+  const [cats, setCats] = useState<string[]>([]); // Initialize empty to mean "all" unless catParam exists
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 24;
   const [sort, setSort] = useState('pop');
@@ -64,10 +66,52 @@ export default function Products() {
   const globalMax = Math.max(...allPrices, 100000);
   const [priceRange, setPriceRange] = useState<[number, number]>([globalMin, globalMax]);
 
+  // Resolve category param (ID or name) to actual DB category name(s)
+  const resolveCatParam = useCallback((param: string, dbCats: string[]): string[] => {
+    if (!param) return [];
+
+    // 1. Direct match (case-insensitive)
+    const direct = dbCats.find(c => c.toLowerCase() === param.toLowerCase());
+    if (direct) return [direct];
+
+    // 2. Match by CATEGORIES_DATA id (e.g., 'fashion' → 'Fashion', 'beauty' → 'Beauty & Personal Care')
+    const catDataEntry = CATEGORIES_DATA.find(c => c.id.toLowerCase() === param.toLowerCase());
+    if (catDataEntry) {
+      const nameMatch = dbCats.find(c => c.toLowerCase() === catDataEntry.name.toLowerCase());
+      if (nameMatch) return [nameMatch];
+      // Partial name match (first word)
+      const firstName = catDataEntry.name.split(' ')[0].toLowerCase();
+      const partial = dbCats.filter(c => c.toLowerCase().startsWith(firstName));
+      if (partial.length > 0) return partial;
+      return [catDataEntry.name]; // fallback to exact CATEGORIES_DATA name
+    }
+
+    // 3. Slug match (home-kitchen → Home & Kitchen)
+    const slug = dbCats.find(c =>
+      c.toLowerCase().replace(/[&\s]+/g, '-') === param.toLowerCase()
+    );
+    if (slug) return [slug];
+
+    // 4. Partial / contains match
+    const partials = dbCats.filter(c =>
+      c.toLowerCase().includes(param.toLowerCase()) ||
+      param.toLowerCase().includes(c.toLowerCase())
+    );
+    if (partials.length > 0) return partials;
+
+    return [param];
+  }, []);
+
+  // Reset page to 1 when any filter changes
+  useEffect(() => {
+    setPage(1);
+    setRealProducts([]);
+  }, [query, subParam, sort, infOnly, priceRange]);
+
   // H-03, H-04, M-05, M-06: Server-side Fetching Logic
   useEffect(() => {
     fetchRealProducts();
-  }, [page, cats, sort, priceRange, query, infOnly]);
+  }, [page, cats, sort, priceRange, query, subParam, infOnly]);
 
   const fetchRealProducts = async () => {
     setIsDBLoading(true);
@@ -75,33 +119,45 @@ export default function Products() {
       let q = supabase
         .from('products')
         .select('*', { count: 'exact' })
-        .eq('approval_status', 'approved') // H-09: Filter by approval status
         .eq('is_active', true);
 
       // H-04: Real Search against DB
-      if (query) {
-        q = q.or(`name.ilike.%${query}%,brand.ilike.%${query}%,cat.ilike.%${query}%,description.ilike.%${query}%`);
+      const searchTerm = (query || subParam).trim();
+      if (searchTerm) {
+        const words = searchTerm.split(/\s+/).filter(w => w.length > 1);
+        if (words.length > 1) {
+          // Multi-word: AND between words (each word must match at least one field)
+          words.forEach(w => {
+            q = q.or(`name.ilike.%${w}%,brand.ilike.%${w}%,category.ilike.%${w}%,description.ilike.%${w}%`);
+          });
+        } else {
+          q = q.or(`name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+        }
       }
 
-      // H-03: Category Filter
-      if (cats.length > 0 && cats.length < CATEGORIES.length) {
-        q = q.in('cat', cats);
+      // H-03: Category Filter — only apply if not searching (search is cross-category)
+      if (cats.length > 0 && !searchTerm) {
+        q = q.in('category', cats);
+      } else if (cats.length > 0 && cats.length < CATEGORIES.length && searchTerm) {
+        // If searching within a category, apply both
+        q = q.in('category', cats);
       }
 
       // H-03: Price Range Filter
-      q = q.gte('price', priceRange[0]).lte('price', priceRange[1]);
+      if (priceRange[0] > 0) q = q.gte('price', priceRange[0]);
+      if (priceRange[1] < globalMax) q = q.lte('price', priceRange[1]);
 
       if (infOnly) {
-        q = q.eq('inf', true);
+        q = q.eq('is_creator_pick', true);
       }
 
       // M-05: Product Sorting
       if (sort === 'lh') q = q.order('price', { ascending: true });
       else if (sort === 'hl') q = q.order('price', { ascending: false });
-      else if (sort === 'rating') q = q.order('rating', { ascending: false });
-      else if (sort === 'disc') q = q.order('price', { ascending: true }); // Approximation
+      else if (sort === 'rating') q = q.order('avg_rating', { ascending: false });
+      else if (sort === 'disc') q = q.order('price', { ascending: true });
       else if (sort === 'new') q = q.order('created_at', { ascending: false });
-      else q = q.order('rating', { ascending: false }); // Popularity fallback
+      else q = q.order('created_at', { ascending: false }); // Popularity fallback
 
       // M-06: Server-side Pagination
       const from = (page - 1) * PAGE_SIZE;
@@ -110,7 +166,25 @@ export default function Products() {
 
       const { data, count, error } = await q;
       if (error) throw error;
-      setRealProducts(prev => page === 1 ? (data || []) : [...prev, ...(data || [])]);
+
+      // Map DB fields to Product interface expected by ProductCard
+      const mapped = (data || []).map((p: any) => ({
+        ...p,
+        cat: p.category || '',
+        icon: p.images?.[0] || p.icon || '📦',
+        rating: p.avg_rating ?? p.rating ?? 4.5,
+        reviews: p.review_count ?? p.reviews ?? 0,
+        mrp: p.mrp || p.price,
+        brand: p.brand || p.description?.replace('Brand: ', '') || '',
+        inf: p.is_creator_pick ?? p.inf ?? false,
+        creator: p.creator_name || p.creator || null,
+        specs: p.specifications ? Object.entries(p.specifications) : (p.specs || []),
+        seller_state: p.seller_state || null,
+        seller_has_gst: p.seller_has_gst ?? false,
+        is_sponsored: p.is_sponsored ?? false,
+      }));
+
+      setRealProducts(prev => page === 1 ? mapped : [...prev, ...mapped]);
       setTotalProducts(count || 0);
     } catch (err) {
       console.error('Error fetching products:', err);
@@ -121,9 +195,16 @@ export default function Products() {
 
   useEffect(() => {
     if (catParam) {
-      setCats([catParam]);
+      // Resolve catParam (could be ID like 'fashion' or name like 'Fashion')
+      const resolved = resolveCatParam(catParam, CATEGORIES);
+      setCats(resolved);
+    } else {
+      // No catParam = show all categories
+      setCats([]);
     }
-  }, [catParam]);
+    setPage(1);
+    setRealProducts([]);
+  }, [catParam, CATEGORIES, resolveCatParam]);
 
   // M-05: Infinite Scroll Observer
   useEffect(() => {
@@ -137,11 +218,12 @@ export default function Products() {
   }, [isDBLoading, realProducts.length, totalProducts]);
 
   const clearFilters = () => {
-    setCats(CATEGORIES);
+    setCats([]);
     setSort('pop');
     setInfOnly(false);
     setPriceRange([globalMin, globalMax]);
     setPage(1);
+    setRealProducts([]);
   };
 
   const isFiltered = infOnly || priceRange[0] > globalMin || priceRange[1] < globalMax

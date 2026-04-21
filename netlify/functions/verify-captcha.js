@@ -15,10 +15,16 @@ exports.handler = async (event) => {
     }
     const secret = process.env.TURNSTILE_SECRET_KEY;
     if (!secret) {
-      console.error('[verify-captcha] TURNSTILE_SECRET_KEY not set');
-      // In dev/preview, allow through if no secret configured
-      if (process.env.CONTEXT === 'deploy-preview' || process.env.CONTEXT === 'dev') {
-        return { statusCode: 200, body: JSON.stringify({ success: true }) };
+      console.warn('[verify-captcha] TURNSTILE_SECRET_KEY not set. Using dev fallback.');
+      // Allow through in development, preview, or local environments if no secret is configured
+      if (process.env.CONTEXT !== 'production' || process.env.NODE_ENV === 'development' || !process.env.CONTEXT) {
+        return { 
+          statusCode: 200, 
+          body: JSON.stringify({ 
+            success: true, 
+            message: 'CAPTCHA skipped (Dev Mode)' 
+          }) 
+        };
       }
       return { statusCode: 500, body: JSON.stringify({ success: false, error: 'CAPTCHA not configured' }) };
     }

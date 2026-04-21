@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { initiateSubscriptionPayment } from '../lib/subscriptionPayment';
+import { getOptimizedImageUrl } from '../lib/images';
 import { toast, toastSuccess } from '../components/Toast';
 import { useAppStore } from '../store';
 import BulkUpload from '../components/BulkUpload';
@@ -358,14 +359,13 @@ export default function Dashboard() {
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('*')
-        .eq('seller_id', user?.id);
+        .eq('seller_id', user?.id)
+        .order('created_at', { ascending: false });
       
-      if (!productsError && productsData) {
-        setProducts(productsData);
-      }
+      if (productsError) throw productsError;
+      if (productsData) setProducts(productsData);
 
-      // Fetch Orders (Mocked or Real if table exists)
-      // We will try to fetch from order_items joined with orders
+      // Fetch Orders
       const { data: ordersData, error: ordersError } = await supabase
         .from('order_items')
         .select(`
@@ -379,13 +379,11 @@ export default function Dashboard() {
         .eq('seller_id', user?.id)
         .order('created_at', { ascending: false });
 
-      if (!ordersError && ordersData) {
-        setOrders(ordersData);
-      } else {
-        console.error('Order fetch error:', ordersError);
-      }
-    } catch (err) {
+      if (ordersError) throw ordersError;
+      if (ordersData) setOrders(ordersData);
+    } catch (err: any) {
       console.error('Error fetching dashboard data:', err);
+      toast('Failed to load dashboard: ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -660,6 +658,15 @@ export default function Dashboard() {
             <div className="text-2xl font-black text-[#0D47A1] mb-2 flex items-center gap-3">
               <Shield className="w-8 h-8" /> Seller KYC Verification
             </div>
+            {kycStatus !== 'approved' && (
+              <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl mb-6 flex items-start gap-3">
+                <ShieldCheck size={20} className="text-orange-500 shrink-0 mt-0.5" />
+                <div>
+                   <p className="text-sm font-black text-orange-800">Verification Required to Start Selling</p>
+                   <p className="text-xs text-orange-700 font-medium leading-relaxed">You must complete your KYC verification to access products, orders, and earnings. Verified sellers receive a blue checkmark and 50% more reach.</p>
+                </div>
+              </div>
+            )}
             <p className="text-gray-500 mb-8 font-medium text-sm">As per BYNDIO policy, sellers must complete KYC verification before listing products. This ensures a safe marketplace for everyone.</p>
 
             {kycStatus === 'approved' ? (
@@ -1157,34 +1164,46 @@ export default function Dashboard() {
                   </div>
                   <div className="flex flex-col gap-1.5 md:col-span-2">
                     <label className="text-[11px] font-bold text-gray-500 uppercase">Product Image *</label>
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden">
-                        {newProduct.images && newProduct.images.startsWith('http') ? <img src={newProduct.images} className="w-full h-full object-cover" /> : newProduct.images}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                      <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden shrink-0">
+                        {newProduct.images && (newProduct.images.startsWith('http') || newProduct.images.startsWith('https')) ? <img src={newProduct.images} className="w-full h-full object-cover" /> : newProduct.images}
                       </div>
-                      <div className="flex-1">
-                        <input 
-                          type="file" accept="image/*" 
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            setImgUploading(true);
-                            try {
-                              const compressed = await compressImage(file);
-                              const fileName = `${user?.id}/${Date.now()}-${file.name}`;
-                              const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
-                              if (error) throw error;
-                              const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
-                              setNewProduct({ ...newProduct, images: publicUrl });
-                              toastSuccess('Image uploaded and compressed!');
-                            } catch (err: any) {
-                              toast('Upload failed: ' + err.message, 'error');
-                            } finally {
-                              setImgUploading(false);
-                            }
-                          }}
-                          className="text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-blue-50 file:text-[#0D47A1] hover:file:bg-blue-100" 
-                        />
-                        <p className="text-[10px] text-gray-400 mt-1">Image will be auto-compressed to ~500KB for faster loading (H-11).</p>
+                      <div className="flex-1 w-full space-y-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 1: Upload File</span>
+                          <input 
+                            type="file" accept="image/*" 
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setImgUploading(true);
+                              try {
+                                const compressed = await compressImage(file);
+                                const fileName = `${user?.id}/${Date.now()}-${file.name}`;
+                                const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
+                                if (error) throw error;
+                                const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
+                                setNewProduct({ ...newProduct, images: publicUrl });
+                                toastSuccess('Image uploaded and compressed!');
+                              } catch (err: any) {
+                                toast('Upload failed: ' + err.message, 'error');
+                              } finally {
+                                setImgUploading(false);
+                              }
+                            }}
+                            className="text-xs file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-blue-50 file:text-[#0D47A1] hover:file:bg-blue-100 cursor-pointer" 
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 2: Image URL</span>
+                          <input 
+                            type="text" 
+                            placeholder="https://example.com/image.jpg"
+                            value={newProduct.images.startsWith('http') ? newProduct.images : ''} 
+                            onChange={e => setNewProduct({...newProduct, images: e.target.value})}
+                            className="w-full p-2 border border-gray-300 rounded-md text-[11px] outline-none focus:border-[#1565C0]"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1215,23 +1234,54 @@ export default function Dashboard() {
                   <tbody>
                     {products.map((p, i) => (
                       <tr key={i} className="hover:bg-blue-50/50">
-                        <td className="p-3 border-b border-gray-200 text-2xl text-center">{p.images?.[0] || '📦'}</td>
-                        <td className="p-3 border-b border-gray-200 font-semibold">{p.name}</td>
-                        <td className="p-3 border-b border-gray-200 font-bold">₹{p.price}</td>
+                        <td className="p-3 border-b border-gray-200">
+                          <div className="w-12 h-12 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center shrink-0">
+                            {p.images?.[0] ? (
+                              <img 
+                                src={getOptimizedImageUrl(p.images[0], 100, 100)} 
+                                className="w-full h-full object-cover" 
+                                alt=""
+                                onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/100?text=📦'; }}
+                              />
+                            ) : (
+                              <span className="text-xl">📦</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3 border-b border-gray-200">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-gray-900">{p.name}</span>
+                            <span className="text-[10px] text-gray-400 uppercase font-black tracking-widest">{p.category}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 border-b border-gray-200 font-bold text-gray-900">₹{p.price.toLocaleString('en-IN')}</td>
                         <td className="p-3 border-b border-gray-200 font-bold text-[#E65100]">{p.commission_pct || 10}%</td>
-                        <td className="p-3 border-b border-gray-200">{p.stock_quantity}</td>
-                        <td className="p-3 border-b border-gray-200"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(p.is_active ? 'Active' : 'Pending')}`}>{p.is_active ? 'Active' : 'Inactive'}</span></td>
-                        <td className="p-3 border-b border-gray-200 flex gap-2 items-center">
-                          <button onClick={() => {
-                            setEditingProduct({ ...p, images: p.images?.[0] || '📦', price: String(p.price), mrp: String(p.mrp), stock_quantity: String(p.stock_quantity) });
-                            setShowEditProduct(true);
-                          }} className="text-[11px] text-[#1565C0] font-bold hover:underline">Edit</button>
-                          <button onClick={async () => {
-                            if (!window.confirm('Delete this product? This cannot be undone.')) return;
-                            const { error: delErr } = await supabase.from('products').update({ is_active: false }).eq('id', p.id);
-                            if (delErr) { toast('Failed to delete product: ' + delErr.message, 'error'); }
-                            else { toastSuccess('Product removed from your store.'); fetchDashboardData(); }
-                          }} className="text-[11px] text-red-500 font-bold hover:underline">Delete</button>
+                        <td className="p-3 border-b border-gray-200 font-medium text-gray-600">{p.stock_quantity}</td>
+                        <td className="p-3 border-b border-gray-200">
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${getStatusColor(p.is_active ? 'Active' : (p.approval_status === 'pending' ? 'Pending' : 'Inactive'))}`}>
+                            {p.is_active ? 'Active' : (p.approval_status === 'pending' ? 'Reviewing' : 'Hidden')}
+                          </span>
+                        </td>
+                        <td className="p-3 border-b border-gray-200">
+                          <div className="flex items-center gap-3">
+                            <Link to={`/product/${p.id}`} target="_blank" className="text-[11px] text-[#2E7D32] font-black hover:underline flex items-center gap-1 uppercase tracking-wider">
+                              <Eye size={12} /> View
+                            </Link>
+                            <button onClick={() => {
+                              setEditingProduct({ ...p, images: p.images?.[0] || '📦', price: String(p.price), mrp: String(p.mrp), stock_quantity: String(p.stock_quantity) });
+                              setShowEditProduct(true);
+                            }} className="text-[11px] text-[#1565C0] font-black hover:underline uppercase tracking-wider">Edit</button>
+                            <button onClick={async () => {
+                              if (!window.confirm('Delete this product permanently? This cannot be undone.')) return;
+                              const { error: delErr } = await supabase.from('products').delete().eq('id', p.id).eq('seller_id', user.id);
+                              if (delErr) { 
+                                toast('Delete failed: ' + delErr.message, 'error'); 
+                              } else { 
+                                toastSuccess('Product deleted successfully.'); 
+                                fetchDashboardData(); 
+                              }
+                            }} className="text-[11px] text-red-600 font-black hover:underline uppercase tracking-wider">Delete</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1290,7 +1340,7 @@ export default function Dashboard() {
                 {[
                   { name: 'Free', price: '₹0/mo', features: ['Unlimited listings', '0% commission', 'Basic analytics', '7-day payout'], color: 'border-gray-200' },
                   { name: 'Pro', price: '₹1,999/mo', features: ['Everything in Free', 'Bulk CSV upload', 'Advanced analytics', 'COD protection', 'Priority support', 'Instant payout'], color: 'border-[#0D47A1]', popular: true },
-                  { name: 'Enterprise', price: 'Custom', features: ['Everything in Pro', 'Dedicated manager', 'API access', 'Custom integrations', 'White-label options'], color: 'border-gray-200' },
+                  { name: 'Premium', price: '₹4,999/mo', features: ['Everything in Pro', 'Dedicated manager', 'API access', 'Custom integrations', 'White-label options'], color: 'border-gray-200' },
                 ].map((plan, i) => (
                   <div key={i} className={`border-2 ${plan.color} rounded-xl p-4 relative`}>
                     {(plan as any).popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#FF9800] text-white text-[10px] font-bold px-3 py-0.5 rounded-full whitespace-nowrap">★ Most Popular</div>}
@@ -1299,16 +1349,7 @@ export default function Dashboard() {
                     {plan.features.map(f => <div key={f} className="text-[12px] text-gray-600 flex items-center gap-1.5 mb-1"><span className="text-[#388E3C] font-black">✓</span>{f}</div>)}
                     <button
                       disabled={plan.name === 'Free' || user?.subscription_plan === plan.name.toLowerCase()}
-                      onClick={() => {
-                        if (plan.name === 'Free' || !plan.price) return;
-                        const prices: Record<string, number> = { Pro: 1999, Enterprise: 9999 };
-                        initiateSubscriptionPayment(
-                          { name: plan.name, price: prices[plan.name] || 1999, priceDisplay: plan.price, role: 'seller' },
-                          { id: user!.id, name: user!.name, email: user!.email },
-                          (planName) => { toast(`🎉 ${planName} plan activated!`, 'success'); },
-                          (msg) => { toast(msg, 'error'); },
-                        );
-                      }}
+                      onClick={() => navigate('/pricing?role=seller')}
                       className="w-full mt-3 bg-[#0D47A1] hover:bg-[#1565C0] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-2 rounded-md text-[12px] font-bold transition-colors">
                       {user?.subscription_plan === plan.name.toLowerCase() ? '✓ Current Plan' : plan.name === 'Free' ? 'Free Plan' : `Get ${plan.name}`}
                     </button>
@@ -1502,30 +1543,12 @@ export default function Dashboard() {
                       {storeInfo.subscription_plan === 'free' ? 'Upgrade to unlock more products, analytics & boost tools.' : 'You have access to premium seller features.'}
                     </div>
                   </div>
-                  {[{ name: 'Basic', price: 499, color: '#E65100', features: '25 products, Basic analytics' },
-                    { name: 'Pro', price: 1499, color: '#0D47A1', features: '100 products, AI tools, 3 free boosts/mo' },
-                    { name: 'Brand', price: 2999, color: '#7B1FA2', features: 'Unlimited products, Custom store page' },
-                  ].filter(p => p.name.toLowerCase() !== storeInfo.subscription_plan).map(plan => (
-                    <button key={plan.name}
-                      onClick={() => {
-                        initiateSubscriptionPayment(
-                          { name: plan.name, price: plan.price, priceDisplay: `₹${plan.price}/mo`, role: 'seller' },
-                          { id: user!.id, name: user!.name || user!.email || '', email: user!.email || '' },
-                          () => { toastSuccess(`${plan.name} plan activated!`); loadSellerSettings(); },
-                          (msg) => { toast(msg, 'error'); }
-                        );
-                      }}
-                      className="w-full text-left p-3 rounded-xl border border-gray-200 hover:shadow-md transition-all group">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-[12px] font-black" style={{color: plan.color}}>{plan.name}</span>
-                          <span className="text-[10px] text-gray-400 ml-2">₹{plan.price}/mo</span>
-                        </div>
-                        <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600" />
-                      </div>
-                      <div className="text-[10px] text-gray-500 mt-0.5">{plan.features}</div>
-                    </button>
-                  ))}
+                  <button 
+                    onClick={() => navigate('/pricing?role=seller')}
+                    className="w-full bg-[#0D47A1] hover:bg-[#1565C0] text-white py-3 rounded-xl text-sm font-black transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
+                  >
+                    🚀 Upgrade Your Plan <ChevronRight size={16} />
+                  </button>
                 </div>
               </div>
               <div className="bg-white rounded-[10px] p-5 shadow-sm">
@@ -1739,10 +1762,23 @@ export default function Dashboard() {
             return (
               <button
                 key={item.id}
-                onClick={() => setTab(item.id)}
-                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] transition-colors border-l-[3px] ${tab === item.id ? 'bg-white/10 text-white border-[#FF9800]' : 'text-white/70 border-transparent hover:bg-white/5 hover:text-white'}`}
+                onClick={() => {
+                  if (item.locked && kycStatus !== 'approved') {
+                    toast('KYC Verification Required: Please complete your verification to access this section.', 'error');
+                    setTab('kyc');
+                  } else {
+                    setTab(item.id);
+                  }
+                }}
+                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] transition-colors border-l-[3px] relative ${tab === item.id ? 'bg-white/10 text-white border-[#FF9800]' : 'text-white/70 border-transparent hover:bg-white/5 hover:text-white'}`}
               >
-                <Icon size={16} /> {item.label}
+                <Icon size={16} /> 
+                <span>{item.label}</span>
+                {item.locked && kycStatus !== 'approved' && (
+                  <div className="ml-auto">
+                    <Shield size={12} className="text-orange-500 opacity-70" />
+                  </div>
+                )}
               </button>
             );
           })}
@@ -1824,34 +1860,46 @@ export default function Dashboard() {
               </div>
               <div className="flex flex-col gap-1.5 md:col-span-2">
                 <label className="text-[11px] font-bold text-gray-500 uppercase">Product Image *</label>
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden">
-                    {editingProduct.images && editingProduct.images.startsWith('http') ? <img src={editingProduct.images} className="w-full h-full object-cover" /> : editingProduct.images}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden shrink-0">
+                    {editingProduct.images && (editingProduct.images.startsWith('http') || editingProduct.images.startsWith('https')) ? <img src={editingProduct.images} className="w-full h-full object-cover" /> : editingProduct.images}
                   </div>
-                  <div className="flex-1">
-                    <input 
-                      type="file" accept="image/*" 
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setImgUploading(true);
-                        try {
-                          const compressed = await compressImage(file);
-                          const fileName = `${user?.id}/${Date.now()}-${file.name}`;
-                          const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
-                          if (error) throw error;
-                          const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
-                          setEditingProduct({ ...editingProduct, images: publicUrl });
-                          toastSuccess('Image updated and compressed!');
-                        } catch (err: any) {
-                          toast('Upload failed: ' + err.message, 'error');
-                        } finally {
-                          setImgUploading(false);
-                        }
-                      }}
-                      className="text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-blue-50 file:text-[#0D47A1] hover:file:bg-blue-100" 
-                    />
-                    <p className="text-[10px] text-gray-400 mt-1">H-11: Compressed to ~500KB</p>
+                  <div className="flex-1 w-full space-y-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 1: Upload File</span>
+                      <input 
+                        type="file" accept="image/*" 
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setImgUploading(true);
+                          try {
+                            const compressed = await compressImage(file);
+                            const fileName = `${user?.id}/${Date.now()}-${file.name}`;
+                            const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
+                            if (error) throw error;
+                            const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
+                            setEditingProduct({ ...editingProduct, images: publicUrl });
+                            toastSuccess('Image updated and compressed!');
+                          } catch (err: any) {
+                            toast('Upload failed: ' + err.message, 'error');
+                          } finally {
+                            setImgUploading(false);
+                          }
+                        }}
+                        className="text-xs file:mr-4 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-blue-50 file:text-[#0D47A1] hover:file:bg-blue-100 cursor-pointer" 
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 2: Image URL</span>
+                      <input 
+                        type="text" 
+                        placeholder="https://example.com/image.jpg"
+                        value={editingProduct.images.startsWith('http') ? editingProduct.images : ''} 
+                        onChange={e => setEditingProduct({...editingProduct, images: e.target.value})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-[11px] outline-none focus:border-[#1565C0]"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
