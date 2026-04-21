@@ -32,17 +32,8 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Valid phone number required' }) };
     }
 
-    // Rate limit: max 3 OTPs per phone per 10 minutes
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const { count } = await supabase
-      .from('cod_otps')
-      .select('*', { count: 'exact', head: true })
-      .eq('phone', phone)
-      .gte('created_at', tenMinutesAgo);
+    // Rate limit check removed as requested
 
-    if (count && count >= 3) {
-      return { statusCode: 429, headers, body: JSON.stringify({ error: 'Too many OTP requests. Try again in 10 minutes.' }) };
-    }
 
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min expiry

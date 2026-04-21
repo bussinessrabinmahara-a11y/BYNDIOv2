@@ -144,17 +144,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     
     setLoading(true); setError(null);
     try {
-      // C-09: Server-side OTP rate limiting
-      const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: `${countryCode}${phone.replace(/\D/g, '')}`, action: 'otp_send' })
-      });
-      const rlData = await rlRes.json().catch(() => ({}));
-      if (!rlRes.ok || !rlData.allowed) {
-        throw new Error(rlData.error || 'Too many OTP requests. Please try again later.');
-      }
-
       // Supabase phone OTP — requires phone auth enabled in Supabase dashboard
       const { error } = await supabase.auth.signInWithOtp({ phone: `${countryCode}${phone.replace(/\D/g, '')}` });
       if (error) throw error;
@@ -186,34 +175,12 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     const phoneId = `${countryCode}${phone.replace(/\D/g, '')}`;
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     try {
-      // Check rate limit first
-      try {
-        const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: phoneId, action: 'otp_verify', increment: false })
-        });
-        const rlData = await rlRes.json().catch(() => ({}));
-        if (!rlRes.ok || !rlData.allowed) {
-          throw new Error(rlData.error || 'Too many attempts. Please try again later.');
-        }
-      } catch (rlErr: any) {
-        if (isLocalhost) console.warn('[RateLimit] OTP check skipped on localhost');
-        else throw rlErr;
-      }
-
       const { data, error } = await supabase.auth.verifyOtp({
         phone: phoneId,
         token: otpCode,
         type: 'sms',
       });
       if (error) {
-        // Increment on failure
-        await fetch('/.netlify/functions/check-rate-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: phoneId, action: 'otp_verify', increment: true })
-        }).catch(() => {});
         throw error;
       }
       initAuth();
@@ -228,24 +195,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
     if (!twoFACode.trim() || twoFACode.length !== 6) { setError('Enter the 6-digit code from your authenticator app'); return; }
     setLoading(true); setError(null);
     try {
-      // Check rate limit
-      const identifier = email || 'anonymous_2fa';
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      try {
-        const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier, action: '2fa_verify', increment: false })
-        });
-        const rlData = await rlRes.json().catch(() => ({}));
-        if (!rlRes.ok || !rlData.allowed) {
-          throw new Error(rlData.error || 'Too many attempts. Please try again later.');
-        }
-      } catch (rlErr: any) {
-        if (isLocalhost) console.warn('[RateLimit] 2FA check skipped on localhost');
-        else throw rlErr;
-      }
-
       // List factors to get the enrolled TOTP factor
       const { data: factors } = await supabase.auth.mfa.listFactors();
       const totpFactor = factors?.all?.find(f => f.factor_type === 'totp');
@@ -269,12 +218,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
       });
       
       if (error) {
-        // Increment on failure
-        await fetch('/.netlify/functions/check-rate-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier, action: '2fa_verify', increment: true })
-        }).catch(() => {});
         throw new Error('Invalid 2FA code. Please try again.');
       }
       
@@ -347,26 +290,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
       }
 
       if (tab === 'register') {
-        // C-07: Server-side signup rate limit check
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        try {
-          const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'signup', increment: false })
-          });
-          const rlData = await rlRes.json().catch(() => ({}));
-          if (!rlRes.ok || !rlData.allowed) {
-            throw new Error(rlData.error || 'Too many attempts. Please try again later.');
-          }
-        } catch (err: any) {
-          if (isLocalhost) {
-            console.warn('[RateLimit] Signup check failed/skipped on localhost');
-          } else {
-            throw err;
-          }
-        }
-
         const { data, error: signUpError } = await supabase.auth.signUp({ 
           email: email.toLowerCase(), 
           password,
@@ -378,13 +301,6 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           }
         });
         if (signUpError) {
-          // Increment attempts on failure
-          await fetch('/.netlify/functions/check-rate-limit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'signup', increment: true })
-          }).catch(() => {});
-          
           if (signUpError.message.toLowerCase().includes('already registered'))
             throw new Error('This email is already registered. Please login instead.');
           throw signUpError;
@@ -428,34 +344,8 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           }
         } else { setSuccess('Please check your email to confirm your account.'); }
       } else {
-        // C-07: Server-side login lockout — Just CHECK first
-        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        try {
-          const rlRes = await fetch('/.netlify/functions/check-rate-limit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'login', increment: false })
-          });
-          const rlData = await rlRes.json().catch(() => ({}));
-          if (!rlRes.ok || !rlData.allowed) {
-            throw new Error(rlData.error || 'Too many attempts. Please try again later.');
-          }
-        } catch (err: any) {
-          if (isLocalhost) {
-            console.warn('[RateLimit] Login check failed/skipped on localhost');
-          } else {
-            throw err;
-          }
-        }
-
         const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) {
-          // Increment attempts on failure
-          await fetch('/.netlify/functions/check-rate-limit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: email.toLowerCase(), action: 'login', increment: true })
-          }).catch(() => {}); // Silent catch for rate limit increment
           throw signInError;
         }
         

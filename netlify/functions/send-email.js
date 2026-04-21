@@ -397,11 +397,8 @@ exports.handler = async (event) => {
     return { statusCode: 401, headers: hdrs, body: JSON.stringify({ success: false, error: 'Authentication required' }) };
   }
 
-  // Rate limit: max 10 emails per IP per minute to prevent spam
-  const ip = event.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
-  if (!rateLimit(`send-email:${ip}`, 10, 60_000)) {
-    return { statusCode: 429, headers: hdrs, body: JSON.stringify({ error: 'Too many requests' }) };
-  }
+  // Rate limit check removed as requested
+
 
   try {
     const { to, template, data } = JSON.parse(event.body || '{}');
