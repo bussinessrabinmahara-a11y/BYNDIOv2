@@ -43,10 +43,11 @@ export default function ToastContainer() {
   return (
     <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-[340px]">
       {toasts.map(t => {
-        const Icon = icons[t.type];
+        const Icon = icons[t.type as keyof typeof icons] || Info;
+        const colorClass = colors[t.type as keyof typeof colors] || colors.info;
         return (
           <div key={t.id}
-            className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-lg text-[13px] font-semibold animate-fade-in ${colors[t.type]}`}
+            className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-lg text-[13px] font-semibold animate-fade-in ${colorClass}`}
             style={{ animation: 'slideInRight 0.25s ease' }}>
             <Icon size={16} className="shrink-0 mt-0.5" />
             <span className="flex-1 leading-snug">{t.message}</span>

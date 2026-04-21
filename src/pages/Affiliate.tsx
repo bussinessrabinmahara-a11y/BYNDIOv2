@@ -15,6 +15,7 @@ export default function Affiliate() {
     e.preventDefault();
     try {
       const { error } = await supabase.from('affiliate_applications').insert({
+        user_id: user?.id || null,
         full_name: formData.name,
         email: formData.email,
         phone: formData.phone,

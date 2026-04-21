@@ -2347,14 +2347,17 @@ function KYCReviewPanel() {
 
   useEffect(() => { 
     fetchKYCs(); 
+    fetchStats();
 
     // REAL-TIME: Listen for KYC submissions
     const channel = supabase.channel('kyc-review-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, () => {
         fetchKYCs();
+        fetchStats();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'kyc_submissions' }, () => {
         fetchKYCs();
+        fetchStats();
       })
       .subscribe();
 
@@ -2363,19 +2366,60 @@ function KYCReviewPanel() {
     };
   }, [filter]);
 
+  const [stats, setStats] = useState({ users: 0, kycs: 0, apps: 0 });
+  const fetchStats = async () => {
+    const { count: u } = await supabase.from('users').select('*', { count: 'exact', head: true });
+    const { count: k } = await supabase.from('kyc_submissions').select('*', { count: 'exact', head: true });
+    const { count: s } = await supabase.from('seller_applications').select('*', { count: 'exact', head: true });
+    setStats({ users: u || 0, kycs: k || 0, apps: s || 0 });
+  };
+
   const fetchKYCs = async () => {
     setLoading(true);
     try {
+      console.log('Admin: Fetching KYCs for filter:', filter);
+      
       // Fetch General KYCs
-      const { data: general, error: genErr } = await supabase.from('kyc_submissions').select('*, users(full_name, email)').eq('status', filter).order('submitted_at', { ascending: false });
-      if (genErr) throw genErr;
-      if (general) setKycs(general);
+      const { data: general, error: genErr } = await supabase
+        .from('kyc_submissions')
+        .select('*, users(full_name, email)')
+        .eq('status', filter)
+        .order('submitted_at', { ascending: false });
 
-      // Fetch Seller KYCs (using 'submitted' matches our dashboard logic)
+      if (genErr) {
+        console.error('Admin: General KYC Fetch Error:', genErr);
+        // Fallback without join
+        const { data: fallback, error: fallErr } = await supabase
+          .from('kyc_submissions')
+          .select('*')
+          .eq('status', filter)
+          .order('submitted_at', { ascending: false });
+        if (fallErr) throw fallErr;
+        setKycs(fallback || []);
+      } else {
+        setKycs(general || []);
+      }
+
+      // Fetch Seller KYCs
       const sellerFilter = filter === 'pending' ? 'submitted' : filter;
-      const { data: s, error: selErr } = await supabase.from('sellers').select('*, users(full_name, email)').eq('kyc_status', sellerFilter).order('id', { ascending: false });
-      if (selErr) throw selErr;
-      if (s) setSellers(s);
+      const { data: s, error: selErr } = await supabase
+        .from('sellers')
+        .select('*, users(full_name, email)')
+        .eq('kyc_status', sellerFilter)
+        .order('id', { ascending: false });
+
+      if (selErr) {
+        console.error('Admin: Seller KYC Fetch Error:', selErr);
+        const { data: fallS, error: fallSErr } = await supabase
+          .from('sellers')
+          .select('*')
+          .eq('kyc_status', sellerFilter)
+          .order('id', { ascending: false });
+        if (fallSErr) throw fallSErr;
+        setSellers(fallS || []);
+      } else {
+        setSellers(s || []);
+      }
     } catch (err: any) {
       toast('Sync Error: ' + err.message, 'error');
       console.error('KYC Fetch Error:', err);
@@ -2413,9 +2457,51 @@ function KYCReviewPanel() {
       toast(error.message, 'error');
     }
   };
+  const testConnection = async () => {
+    try {
+      toast('Testing database...', 'info');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+      
+      const { error } = await supabase.from('seller_applications').insert({
+        user_id: user.id,
+        full_name: 'TEST ADMIN',
+        email: 'test@admin.com',
+        phone: '0000000000',
+        business_name: 'TEST BUSINESS',
+        status: 'pending'
+      });
+      
+      if (error) throw error;
+      toastSuccess('Test record inserted successfully! The database is connected.');
+      fetchStats();
+    } catch (err: any) {
+      console.error('Connection Test Error:', err);
+      toast('Connection Test Failed: ' + err.message, 'error');
+    }
+  };
 
   return (
     <div className="space-y-8">
+      {/* DB Connection Status Widget */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Users</div>
+          <div className="text-2xl font-black text-[#0D47A1]">{stats.users}</div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">KYC Records</div>
+          <div className="text-2xl font-black text-[#0D47A1]">{stats.kycs}</div>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Applications</div>
+          <div className="text-2xl font-black text-[#0D47A1]">{stats.apps}</div>
+        </div>
+        <button onClick={testConnection} className="bg-[#E3F2FD] text-[#0D47A1] p-4 rounded-2xl border border-blue-100 shadow-sm font-black text-[11px] hover:bg-blue-100 transition-colors">
+          ⚡ TEST DB CONNECTION
+        </button>
+      </div>
+
       <div>
         <div className="text-xl font-black text-[#0D47A1] mb-2 flex items-center gap-2">
           <Shield className="w-6 h-6" /> User KYC Review
@@ -2843,15 +2929,19 @@ function ApplicationsPanel() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from(`${tab}_applications`).select('*').order('created_at', { ascending: false }).limit(50);
-    if (error) {
-      console.error(`Error fetching ${tab} applications:`, error);
-      toast(`Failed to load ${tab} applications: ` + error.message, 'error');
-      setApps([]);
-    } else {
+    try {
+      console.log(`Admin: Fetching ${tab}_applications`);
+      const { data, error } = await supabase.from(`${tab}_applications`).select('*').order('created_at', { ascending: false }).limit(50);
+      if (error) throw error;
+      console.log(`Admin: Fetched ${tab} applications:`, data);
       setApps(data || []);
+    } catch (err: any) {
+      console.error(`Admin: ${tab} application Fetch Error:`, err);
+      toast(`Failed to load ${tab} applications: ` + err.message, 'error');
+      setApps([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [tab]);
 
   // Expose load function for realtime updates
@@ -3691,6 +3781,7 @@ export default function Admin() {
   const [kycCount, setKycCount] = useState(0);
   const [returnCount, setReturnCount] = useState(0);
   const [subRequestCount, setSubRequestCount] = useState(0);
+  const [appCount, setAppCount] = useState(0);
 
   // Load badge counts for sidebar
   const refreshAll = useCallback(() => {
@@ -3700,11 +3791,13 @@ export default function Admin() {
       supabase.from('sellers').select('id', { count: 'exact', head: true }).eq('kyc_status', 'submitted'),
       supabase.from('return_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       supabase.from('subscription_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    ]).then(([p, k, s, r, sub]) => {
+      supabase.from('seller_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    ]).then(([p, k, s, r, sub, apps]) => {
       setPendingCount(p.count || 0);
       setKycCount((k.count || 0) + (s.count || 0));
       setReturnCount(r.count || 0);
       setSubRequestCount(sub.count || 0);
+      setAppCount(apps.count || 0);
     }).catch(err => {
       toast('Sync failed: ' + err.message, 'error');
     });
@@ -3768,7 +3861,7 @@ export default function Admin() {
       title: 'Users',
       items: [
         { id: 'users', icon: Users, label: 'Users', badge: 0 },
-        { id: 'applications', icon: Star, label: 'Applications', badge: 0 },
+        { id: 'applications', icon: Star, label: 'Applications', badge: appCount },
         { id: 'sub_requests', icon: Shield, label: 'Plan Verification', badge: subRequestCount },
         { id: 'subscriptions', icon: Award, label: 'Active Plans', badge: 0 },
         { id: 'popups', icon: Zap, label: 'Offers & Popups', badge: 0 },

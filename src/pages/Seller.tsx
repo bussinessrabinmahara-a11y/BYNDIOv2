@@ -267,7 +267,7 @@ export default function Seller() {
 
     try {
       const { error } = await supabase.from('seller_applications').insert({
-        user_id:         user.id,
+        user_id:         user?.id || null,
         full_name:       formData.fullName || '',
         email:           formData.email || '',
         phone:           formData.phone || '',

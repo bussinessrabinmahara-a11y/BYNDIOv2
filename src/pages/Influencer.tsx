@@ -3,9 +3,11 @@ import { usePageTitle } from '../lib/usePageTitle';
 import { Link } from 'react-router-dom';
 import { toastSuccess, toast } from '../components/Toast';
 import { supabase } from '../lib/supabase';
+import { useAppStore } from '../store';
 
 export default function Influencer() {
   usePageTitle('Join Creator Hub');
+  const { user } = useAppStore();
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -15,6 +17,7 @@ export default function Influencer() {
     const data = new FormData(form);
     try {
       const { error } = await supabase.from('influencer_applications').insert({
+        user_id: user?.id || null,
         full_name: data.get('fullName') as string,
         email: data.get('email') as string,
         phone: data.get('phone') as string,
