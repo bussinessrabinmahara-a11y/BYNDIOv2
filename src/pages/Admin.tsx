@@ -3675,6 +3675,7 @@ function SubscriptionManager() {
               ))}
             </tbody>
           </table>
+        </div>
       </div>
     </div>
   );
