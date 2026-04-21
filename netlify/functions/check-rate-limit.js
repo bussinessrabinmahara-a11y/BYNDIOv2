@@ -16,8 +16,8 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing identifier or action' }) };
     }
 
-    // Set limits based on user request: 15 attempts, 1 minute lock
-    const maxAttempts = 15;
+    // Set limits based on user request: 100 attempts, 1 minute lock
+    const maxAttempts = 100;
     const lockDurationMins = 1;
     
     // Fetch rate limit record
