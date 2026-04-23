@@ -421,7 +421,7 @@ function InstantWalletCredit() {
     
     setCrediting(true);
     try {
-      const response = await fetch('/.netlify/functions/award-referral-points', {
+      const response = await fetch('/api/award-referral-points', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

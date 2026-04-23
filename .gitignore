@@ -41,7 +41,7 @@ sql_fix.txt
 extract_logo.js
 byndio-logo.html
 original_logo.png
-.netlify/
+.vercel/
 .agent/
 .temp/
 *.log

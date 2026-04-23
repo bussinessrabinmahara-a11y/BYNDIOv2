@@ -3,6 +3,7 @@ import { usePageTitle } from '../lib/usePageTitle';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '../store';
 import ProductCard from '../components/ProductCard';
+import { Skeleton } from '../components/Skeleton';
 
 function Countdown({ endsAt }: { endsAt: string }) {
   const calc = useCallback(() => {
@@ -70,7 +71,9 @@ export default function FlashSales() {
           <Link to="/products" className="text-[12px] text-[#1565C0] font-semibold hover:underline">All Products →</Link>
         </div>
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">{[...Array(8)].map((_, i) => <div key={i} className="bg-white rounded-[10px] h-[280px] animate-pulse" />)}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <Skeleton count={8} />
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">

@@ -48,6 +48,10 @@ interface AppState {
    isLoadingFollows: boolean;
    profileFetchError: boolean;
    isSubmittingOrder: boolean; // C-05
+   featuredSellers: any[];
+   activeCoupons: any[];
+   isLoadingSellers: boolean;
+   isLoadingCoupons: boolean;
 
   fetchProducts: () => Promise<void>;
   fetchSiteSettings: () => Promise<void>;
@@ -57,6 +61,8 @@ interface AppState {
   fetchFlashSales: () => Promise<void>;
   fetchWalletData: () => Promise<void>;
   fetchFollows: () => Promise<void>;
+  fetchFeaturedSellers: () => Promise<void>;
+  fetchActiveCoupons: () => Promise<void>;
   toggleFollow: (id: string) => Promise<void>;
   generateAffiliateLink: (productId: string) => Promise<string | null>;
   addRecentlyViewed: (id: number | string) => void;
@@ -104,6 +110,10 @@ export const useAppStore = create<AppState>()(
        isLoadingFollows: false,
        profileFetchError: false,
        isSubmittingOrder: false, // C-05
+       featuredSellers: [],
+       activeCoupons: [],
+       isLoadingSellers: false,
+       isLoadingCoupons: false,
 
        initAuth: () => {
          const urlParams = new URLSearchParams(window.location.search);
@@ -259,7 +269,7 @@ export const useAppStore = create<AppState>()(
          if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) return;
          set({ isLoadingProducts: true });
          try {
-           const { data, error } = await supabase.from('products').select('*').eq('is_active', true);
+           const { data, error } = await supabase.from('products').select('*').eq('is_active', true).eq('approval_status', 'approved');
            if (error) {
              console.warn('[store] Products table not found or empty, using local data');
              set({ isLoadingProducts: false });
@@ -278,6 +288,7 @@ export const useAppStore = create<AppState>()(
                seller_id: p.seller_id,
                seller_state: p.seller_state || null,
                seller_has_gst: p.seller_has_gst ?? false,
+               images: p.images || []
              })) });
            }
          } catch (err) { 
@@ -335,6 +346,51 @@ export const useAppStore = create<AppState>()(
             if (data) set({ follows: data.map((f: any) => f.following_id) });
           } catch (err) { console.error('[store] Fetch follows failed:', err); }
           finally { set({ isLoadingFollows: false }); }
+        },
+
+        fetchFeaturedSellers: async () => {
+          if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) return;
+          set({ isLoadingSellers: true });
+          try {
+            const { data, error } = await supabase
+              .from('sellers')
+              .select('*')
+              .limit(10);
+            if (data) {
+              set({ featuredSellers: data.map(s => ({
+                id: s.id,
+                name: s.business_name,
+                icon: s.store_logo || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
+                products: 0, // In real app, count from products table
+                rating: 4.8,
+                followers: '0',
+                cat: s.business_type || 'Retail',
+                tagline: s.business_description || 'Professional Seller'
+              })) });
+            }
+          } catch (err) { console.error('[store] Fetch sellers failed:', err); }
+          finally { set({ isLoadingSellers: false }); }
+        },
+
+        fetchActiveCoupons: async () => {
+          if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) return;
+          set({ isLoadingCoupons: true });
+          try {
+            const { data } = await supabase
+              .from('coupons')
+              .select('*')
+              .eq('is_active', true)
+              .limit(10);
+            if (data) {
+              set({ activeCoupons: data.map(c => ({
+                code: c.code,
+                desc: c.type === 'percent' ? `${c.value}% OFF` : `₹${c.value} OFF`,
+                color: c.type === 'percent' ? '#E91E63' : '#1565C0',
+                min: 'Valid on all orders'
+              })) });
+            }
+          } catch (err) { console.error('[store] Fetch coupons failed:', err); }
+          finally { set({ isLoadingCoupons: false }); }
         },
 
         toggleFollow: async (id: string) => {
@@ -491,7 +547,7 @@ export const useAppStore = create<AppState>()(
            return { success: false, error: 'Please enter a valid 6-digit PIN code.' };
          }
 
-         const API_BASE = '/.netlify/functions';
+          const API_BASE = '/api';
 
          // ── C-05: Deterministic idempotency key (prevents duplicate orders) ──
          const cartHash = btoa(JSON.stringify(cart.map(i => i.id + ':' + i.qty).sort()));
@@ -538,7 +594,7 @@ export const useAppStore = create<AppState>()(
               if (!orderRes.ok) {
                 const errData = await orderRes.json().catch(() => ({}));
                 if (!errData.error && (import.meta as any).env.DEV) {
-                  console.warn('[BYNDIO] Netlify functions not running (Vite 404). Mocking Razorpay order for local dev.');
+                  console.warn('[BYNDIO] API functions not running (Vite 404). Mocking Razorpay order for local dev.');
                   rzpOrder = {
                     orderId: `order_TEST_${Date.now()}`,
                     amount: total * 100,
@@ -729,9 +785,9 @@ export const useAppStore = create<AppState>()(
 
            if (itemsError) throw itemsError;
 
-             // H-17: Send order confirmation email via Netlify function
+             // H-17: Send order confirmation email via API function
              try {
-               await fetch('/.netlify/functions/send-order-notification', {
+               await fetch('/api/send-order-notification', {
                  method: 'POST',
                  headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify({

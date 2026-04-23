@@ -8,6 +8,7 @@ import ProductCard from '../components/ProductCard';
 import { usePageTitle } from '../lib/usePageTitle';
 import { useAppStore } from '../store';
 import { CATEGORIES_DATA } from '../data/categories';
+import { Skeleton } from '../components/Skeleton';
 
 // ────────────────────────────────────────────────
 // STATIC DATA
@@ -23,28 +24,11 @@ const CATEGORIES = CATEGORIES_DATA.map(cat => ({
   subs: cat.subCategories.map(s => s.name)
 }));
 
-const COUPONS = [
-  { code: 'FIRST50',   desc: '50% OFF on 1st Order',       color: '#E91E63', min: 'Min order ₹299' },
-  { code: 'BYNDIO20',  desc: '20% OFF on Fashion',         color: '#1565C0', min: 'Min order ₹499' },
-  { code: 'FREE100',   desc: 'Free Ship + ₹100 off',       color: '#1B5E20', min: 'Min order ₹599' },
-  { code: 'CREATOR30', desc: '30% OFF Creator Picks',      color: '#7B1FA2', min: 'Min order ₹799' },
-];
+const COUPONS: any[] = [];
 
-const FEATURED_SELLERS = [
-  { id: 'seller-stylehub', name: 'StyleHub India',  icon: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200', products: 234, rating: 4.8, followers: '12K', cat: 'Fashion',     tagline: 'Trendy fashion for all' },
-  { id: 'seller-techzone', name: 'TechZone Store',  icon: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&q=80&w=200', products: 156, rating: 4.9, followers: '8K',  cat: 'Electronics', tagline: 'Latest gadgets & deals' },
-  { id: 'seller-glamour',  name: 'GlamourBox',      icon: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=200', products: 89,  rating: 4.7, followers: '5K',  cat: 'Beauty',      tagline: 'Glow up essentials' },
-  { id: 'seller-kids',     name: 'KidsParadise',    icon: 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&q=80&w=200', products: 312, rating: 4.8, followers: '9K',  cat: 'Kids',        tagline: 'Fun stuff for little ones' },
-  { id: 'seller-homenest', name: 'HomeNest',        icon: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=200', products: 178, rating: 4.6, followers: '6K',  cat: 'Home',        tagline: 'Modern home & decor' },
-];
+const FEATURED_SELLERS: any[] = [];
 
-const VIBES = [
-  { img: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=600', title: 'Everyday Essentials',  tagline: 'Simple. Clean. Daily wear.',    cat: 'Fashion' },
-  { img: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&q=80&w=600', title: 'Party & Glam',          tagline: 'Stand out. Go bold.',           cat: 'Fashion' },
-  { img: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=600', title: 'Creator Picks',         tagline: 'Trending on BYNDIO.',           cat: null, link: '/influencer' },
-  { img: 'https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?auto=format&fit=crop&q=80&w=600', title: 'Budget Finds',          tagline: 'Under ₹999.',                   cat: null, link: '/products?max=999' },
-  { img: 'https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&q=80&w=600', title: 'Festive Ready',         tagline: 'Celebrate in style.',           cat: 'Fashion' },
-];
+const VIBES: any[] = [];
 
 // ────────────────────────────────────────────────────────────────
 // COMPONENT
@@ -56,12 +40,11 @@ export default function Home() {
   const [mobileEmblaRef, mobileEmblaApi] = useEmblaCarousel({ loop: true });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mobileSelectedIndex, setMobileSelectedIndex] = useState(0);
-  const products         = useAppStore(s => s.products);
-  const isLoadingProducts= useAppStore(s => s.isLoadingProducts);
+  const { products, flashSales, fetchProducts, fetchFlashSales, fetchFeaturedSellers, fetchActiveCoupons, featuredSellers, activeCoupons } = useAppStore();
   const siteSettings     = useAppStore(s => s.siteSettings);
   const user             = useAppStore(s => s.user);
   const recentlyViewed   = useAppStore(s => s.recentlyViewed);
-  const fetchFlashSales  = useAppStore(s => s.fetchFlashSales);
+  const [isLoading, setIsLoading] = useState(true);
 
   const navigate = useNavigate();
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
@@ -72,6 +55,15 @@ export default function Home() {
   const follows          = useAppStore(s => s.follows);
   const toggleFollow     = useAppStore(s => s.toggleFollow);
   const [timeLeft,     setTimeLeft]     = useState({ h: 5, m: 23, s: 45 });
+
+  useEffect(() => {
+    Promise.all([
+      fetchProducts(),
+      fetchFlashSales(),
+      fetchFeaturedSellers(),
+      fetchActiveCoupons()
+    ]).finally(() => setIsLoading(false));
+  }, []);
 
   const handleMobileSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,8 +94,6 @@ export default function Home() {
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => setIsListening(false);
   };
-
-  useEffect(() => { fetchFlashSales(); }, [fetchFlashSales]);
 
   // Countdown
   useEffect(() => {
@@ -140,12 +130,11 @@ export default function Home() {
 
   // Derived product lists
   const trending    = products.slice(0, 8);
-  const fashion     = products.filter(p => (p.category || p.cat) === 'Fashion').slice(0, 4);
-  const electronics = products.filter(p => (p.category || p.cat) === 'Electronics').slice(0, 4);
-  const beauty      = products.filter(p => (p.category || p.cat) === 'Beauty').slice(0, 4);
-  const kids        = products.filter(p => (p.category || p.cat) === 'Kids').slice(0, 5);
+  const fashion     = products.filter(p => (p.category || p.cat)?.includes('Fashion')).slice(0, 4);
+  const electronics = products.filter(p => (p.category || p.cat)?.includes('Electronics')).slice(0, 4);
+  const beauty      = products.filter(p => (p.category || p.cat)?.includes('Beauty')).slice(0, 4);
+  const kids        = products.filter(p => (p.category || p.cat)?.includes('Kids') || (p.category || p.cat)?.includes('Baby')).slice(0, 5);
   const offerProduct= products.find(p => p.mrp > p.price * 1.4) || products[0] || null;
-  const creatorPicks= products.filter(p => p.inf).slice(0, 6);
   const recentProds = products.filter(p => (recentlyViewed || []).includes(p.id)).slice(0, 6);
 
   const heroTitle   = siteSettings?.hero_title    || 'Shop Beyond Ordinary';
@@ -175,21 +164,7 @@ export default function Home() {
 
   const fmt = (n: number) => String(n).padStart(2, '0');
 
-  // Skeleton loader
-  const Skeleton = ({ count = 4, h = 'h-[160px]' }: { count?: number; h?: string }) => (
-    <>
-      {[...Array(count)].map((_, i) => (
-        <div key={i} className="bg-white border border-gray-100 rounded-2xl overflow-hidden animate-pulse">
-          <div className={`${h} bg-gray-100`} />
-          <div className="p-3 space-y-2">
-            <div className="h-3 bg-gray-100 rounded w-4/5" />
-            <div className="h-3 bg-gray-100 rounded w-1/2" />
-            <div className="h-7 bg-gray-100 rounded" />
-          </div>
-        </div>
-      ))}
-    </>
-  );
+
 
   // Section header
   const SectionHeader = ({ title, link, linkText = 'See All →' }: { title: string; link: string; linkText?: string }) => (
@@ -300,49 +275,20 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Coupons / Exclusive Offers - Mobile Scroller */}
-        <div className="px-3 mb-4">
-          <div className="flex items-center justify-between mb-2 px-1">
-            <h2 className="text-[13px] font-black flex items-center gap-1.5 uppercase tracking-tight text-gray-900">🎟️ Exclusive Offers</h2>
-            <div className="flex gap-1.5 z-10 shrink-0">
-              <button 
-                onClick={() => { document.getElementById('mobile-coupons-scroller')?.scrollBy({ left: -220, behavior: 'smooth' }) }} 
-                className="w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center border border-gray-100 text-gray-600 hover:bg-gray-50 active:scale-95 transition-all"
-                aria-label="Scroll left"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button 
-                onClick={() => { document.getElementById('mobile-coupons-scroller')?.scrollBy({ left: 220, behavior: 'smooth' }) }} 
-                className="w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center border border-gray-100 text-gray-600 hover:bg-gray-50 active:scale-95 transition-all"
-                aria-label="Scroll right"
-              >
-                <ChevronRight size={14} />
-              </button>
+        {activeCoupons.length > 0 && (
+          <div className="bg-[#1A237E] py-4 overflow-hidden relative">
+            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent animate-pulse" />
+            <div className="flex gap-4 animate-scroll whitespace-nowrap">
+              {[...activeCoupons, ...activeCoupons, ...activeCoupons].map((c, i) => (
+                <div key={i} className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/20">
+                  <span className="text-white font-black text-[11px] tracking-widest">{c.code}</span>
+                  <span className="text-white/60 text-[10px] font-bold">•</span>
+                  <span className="text-yellow-400 font-black text-[11px]">{c.desc}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div id="mobile-coupons-scroller" className="flex overflow-x-auto gap-2.5 pb-2 scrollbar-hide snap-x scroll-smooth relative">
-            {COUPONS.map((c, i) => (
-              <div key={i} className="min-w-[220px] shrink-0 snap-start overflow-hidden rounded-[14px] p-3 shadow-sm border border-gray-100 bg-white relative cursor-pointer" onClick={() => copyCode(c.code)}>
-                <div className="absolute top-0 right-0 w-20 h-20 rounded-bl-[80px] opacity-10" style={{ background: c.color }} />
-                <div className="absolute inset-y-0 left-0 w-1" style={{ background: c.color }} />
-                <div className="flex flex-col h-full justify-between relative z-10 pl-1.5">
-                  <div>
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest text-white mb-1.5 shadow-sm" style={{ background: c.color }}>OFFER</span>
-                    <p className="text-[12px] font-black leading-tight text-gray-900 mb-0.5 truncate">{c.desc}</p>
-                    <p className="text-[9px] text-gray-500 font-medium mb-3">{c.min}</p>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-dashed border-gray-200 pt-2.5 mt-auto">
-                    <code className="text-[10px] font-black tracking-widest text-gray-800 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{c.code}</code>
-                    <button className="w-6 h-6 rounded-full flex items-center justify-center shadow-sm text-white transition-transform active:scale-90" style={{ background: c.color }}>
-                      {copiedCoupon === c.code ? <Check size={12}/> : <Copy size={12}/>}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
 
         {/* Trending Next Right Now - Mobile */}
         <div className="px-3 mb-6">
@@ -475,49 +421,50 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ══════════════════ COUPONS (REDESIGNED) ══════════════════ */}
-      <div className="max-w-7xl mx-auto w-full px-4 pt-8 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[20px] font-black flex items-center gap-2">🎟️ Exclusive Offers</h2>
-        </div>
-        <motion.div 
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-          initial="hidden" whileInView="visible" viewport={{ once: true }}
-          variants={{ visible: { transition: { staggerChildren: 0.1 } }, hidden: {} }}
-        >
-          {COUPONS.map((c, i) => (
-            <motion.div 
-              key={i}
-              variants={{
-                hidden: { opacity: 0, y: 30 },
-                visible: { opacity: 1, y: 0, transition: { type: 'spring', bounce: 0.4 } }
-              }}
-              whileHover={{ y: -5, scale: 1.02 }}
-              className="relative overflow-hidden rounded-[20px] p-5 shadow-sm hover:shadow-xl transition-all group border border-gray-100 bg-white cursor-pointer" 
-              onClick={() => copyCode(c.code)}
-            >
-              {/* Premium Background Accent */}
-              <div className="absolute top-0 right-0 w-24 h-24 rounded-bl-[100px] opacity-10 transition-transform group-hover:scale-110" style={{ background: c.color }} />
-              <div className="absolute inset-y-0 left-0 w-1.5" style={{ background: c.color }} />
-              
-              <div className="flex flex-col h-full justify-between relative z-10 pl-2">
-                <div>
-                  <span className="inline-block px-2 py-0.5 rounded text-[9px] font-black tracking-widest text-white mb-2" style={{ background: c.color }}>OFFER</span>
-                  <p className="text-[14px] font-black leading-tight text-gray-900 mb-1">{c.desc}</p>
-                  <p className="text-[11px] text-gray-500 font-medium mb-4">{c.min}</p>
-                </div>
+      {activeCoupons.length > 0 && (
+        <div className="max-w-7xl mx-auto w-full px-4 pt-8 pb-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-[20px] font-black flex items-center gap-2">🎟️ Exclusive Offers</h2>
+          </div>
+          <motion.div 
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+            initial="hidden" whileInView="visible" viewport={{ once: true }}
+            variants={{ visible: { transition: { staggerChildren: 0.1 } }, hidden: {} }}
+          >
+            {activeCoupons.map((c, i) => (
+              <motion.div 
+                key={i}
+                variants={{
+                  hidden: { opacity: 0, y: 30 },
+                  visible: { opacity: 1, y: 0, transition: { type: 'spring', bounce: 0.4 } }
+                }}
+                whileHover={{ y: -5, scale: 1.02 }}
+                className="relative overflow-hidden rounded-[20px] p-5 shadow-sm hover:shadow-xl transition-all group border border-gray-100 bg-white cursor-pointer" 
+                onClick={() => copyCode(c.code)}
+              >
+                {/* Premium Background Accent */}
+                <div className="absolute top-0 right-0 w-24 h-24 rounded-bl-[100px] opacity-10 transition-transform group-hover:scale-110" style={{ background: c.color }} />
+                <div className="absolute inset-y-0 left-0 w-1.5" style={{ background: c.color }} />
                 
-                <div className="flex items-center justify-between border-t border-dashed border-gray-200 pt-3 mt-auto">
-                  <code className="text-[13px] font-black tracking-widest text-gray-800 bg-gray-50 px-2 py-1 rounded inline-block">{c.code}</code>
-                  <button className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm text-white transition-transform group-hover:-translate-y-1" style={{ background: c.color }}>
-                    {copiedCoupon === c.code ? <Check size={14}/> : <Copy size={14}/>}
-                  </button>
+                <div className="flex flex-col h-full justify-between relative z-10 pl-2">
+                  <div>
+                    <span className="inline-block px-2 py-0.5 rounded text-[9px] font-black tracking-widest text-white mb-2" style={{ background: c.color }}>OFFER</span>
+                    <p className="text-[14px] font-black leading-tight text-gray-900 mb-1">{c.desc}</p>
+                    <p className="text-[11px] text-gray-500 font-medium mb-4">{c.min}</p>
+                  </div>
+                  
+                  <div className="flex items-center justify-between border-t border-dashed border-gray-200 pt-3 mt-auto">
+                    <code className="text-[13px] font-black tracking-widest text-gray-800 bg-gray-50 px-2 py-1 rounded inline-block">{c.code}</code>
+                    <button className="w-8 h-8 rounded-full flex items-center justify-center shadow-sm text-white transition-transform group-hover:-translate-y-1" style={{ background: c.color }}>
+                      {copiedCoupon === c.code ? <Check size={14}/> : <Copy size={14}/>}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
-      </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      )}
 
       {/* ══════════════════ TRENDING NOW ══════════════════ */}
       <div className="max-w-7xl mx-auto w-full px-4 py-5">
@@ -529,7 +476,7 @@ export default function Home() {
           transition={{ duration: 0.5 }}
           className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2 md:gap-2.5"
         >
-          {isLoadingProducts ? <Skeleton count={9} /> : trending.map(p => <ProductCard key={p.id} product={p} />)}
+          {isLoading ? <Skeleton count={9} /> : trending.map(p => <ProductCard key={p.id} product={p} />)}
         </motion.div>
       </div>
 
@@ -627,7 +574,7 @@ export default function Home() {
               </div>
               
               {/* Products - Side by side on mobile scroll */}
-              {isLoadingProducts ? <Skeleton count={4} /> : fashion.map(p => (
+              {isLoading ? <Skeleton count={4} /> : fashion.map(p => (
                 <div key={p.id} className="min-w-[130px] md:min-w-0 snap-start">
                   <ProductCard product={p} />
                 </div>
@@ -667,7 +614,7 @@ export default function Home() {
               </div>
 
               {/* Products */}
-              {isLoadingProducts ? <Skeleton count={4} /> : electronics.map(p => (
+              {isLoading ? <Skeleton count={4} /> : electronics.map(p => (
                 <div key={p.id} className="min-w-[130px] md:min-w-0 snap-start">
                   <ProductCard product={p} />
                 </div>
@@ -707,7 +654,7 @@ export default function Home() {
               </div>
 
               {/* Products - Side by side on mobile scroll */}
-              {isLoadingProducts ? <Skeleton count={4} /> : beauty.map(p => (
+              {isLoading ? <Skeleton count={4} /> : beauty.map(p => (
                 <div key={p.id} className="min-w-[130px] md:min-w-0 snap-start">
                   <ProductCard product={p} />
                 </div>
@@ -717,76 +664,39 @@ export default function Home() {
         </div>
       )}
 
-      {/* ══════════════════ SHOP YOUR VIBE (REALISTIC) ══════════════════ */}
-      <div className="max-w-7xl mx-auto w-full px-4 py-8">
-        <div className="mb-4 md:mb-6 flex flex-col items-center text-center px-2">
-          <h2 className="text-[18px] md:text-[22px] font-black text-gray-900">✨ Shop Your Vibe</h2>
-          <p className="text-[11px] md:text-[13px] text-gray-500 mt-1 max-w-sm">Curated aesthetic collections to match your mood.</p>
-        </div>
-        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
-          {VIBES.map((v, i) => (
-            <Link key={i}
-              to={v.link || `/products${v.cat ? `?cat=${v.cat}` : ''}`}
-              className="rounded-xl md:rounded-2xl overflow-hidden relative group/vibe cursor-pointer hover:-translate-y-2 transition-all duration-300 shadow-sm hover:shadow-2xl h-[150px] md:h-[220px]">
-              <img src={v.img} alt={v.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover/vibe:scale-110" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent" />
-              <div className="relative p-2 md:p-4 flex flex-col justify-end h-full">
-                <div>
-                  <div className="text-white font-black text-[11px] md:text-[15px] leading-tight mb-0.5">{v.title}</div>
-                  <div className="hidden md:block text-white/80 text-[11px] font-medium tracking-wide">{v.tagline}</div>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-
       {/* ══════════════════ KIDS SECTION ══════════════════ */}
       {kids.length > 0 && (
         <div className="max-w-7xl mx-auto w-full px-4 py-5">
           <SectionHeader title="🧸 Kids & Baby" link="/products?cat=Kids" />
           <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2 md:gap-2.5">
-            {isLoadingProducts ? <Skeleton count={6} /> : kids.map(p => <ProductCard key={p.id} product={p}/>)}
+            {isLoading ? <Skeleton count={6} /> : kids.map(p => <ProductCard key={p.id} product={p}/>)}
           </div>
         </div>
       )}
 
-      {/* ══════════════════ FEATURED SELLERS (REALISTIC) ══════════════════ */}
-      <div className="bg-white py-8 md:py-10 border-y border-gray-100">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-end justify-between mb-4 md:mb-6 border-l-4 border-[#0D47A1] pl-3 md:pl-4">
-            <h2 className="text-[16px] md:text-[16px] font-black flex items-center gap-1.5 md:gap-2 uppercase tracking-[0.05em]">🏪 Top Sellers <span className="bg-green-100 text-green-700 text-[8px] md:text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider">0% COMMS</span></h2>
-            <div className="flex items-center gap-4">
-              <div className="md:hidden flex gap-1">
-                <button onClick={() => document.getElementById('sellers-scroller')?.scrollBy({ left: -180, behavior: 'smooth' })} className="w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center border border-gray-100"><ChevronLeft size={14} /></button>
-                <button onClick={() => document.getElementById('sellers-scroller')?.scrollBy({ left: 180, behavior: 'smooth' })} className="w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center border border-gray-100"><ChevronRight size={14} /></button>
-              </div>
-              <Link to="/seller" className="text-[10px] md:text-[11px] bg-[#0D47A1] text-white px-4 py-1.5 md:px-5 md:py-2 rounded-full font-black uppercase tracking-wider">Become a Seller</Link>
-            </div>
-          </div>
-          <div id="sellers-scroller" className="flex md:grid md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-3 pb-4 md:pb-0 scrollbar-hide snap-x scroll-smooth">
-            {FEATURED_SELLERS.map((seller, i) => (
-              <div key={i} className="min-w-[150px] md:min-w-0 bg-white border border-gray-100 rounded-2xl md:rounded-[20px] p-4 md:p-5 text-center hover:border-[#1565C0] hover:shadow-xl transition-all duration-300 cursor-pointer group shrink-0 snap-start">
-                <div className="w-14 h-14 md:w-20 md:h-20 rounded-full mx-auto mb-2 md:mb-3 overflow-hidden shadow-sm ring-4 ring-gray-50 group-hover:ring-blue-50 transition-all">
-                   <img src={seller.icon} alt={seller.name} className="w-full h-full object-cover" />
+      {featuredSellers.length > 0 && (
+        <div className="max-w-7xl mx-auto w-full px-4 py-8">
+          <SectionHeader title="👑 Featured Stores" link="/sellers" />
+          <div className="flex overflow-x-auto gap-4 pb-4 scrollbar-hide snap-x">
+            {featuredSellers.map(s => (
+              <Link key={s.id} to={`/seller/${s.id}`} className="shrink-0 w-[200px] bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-xl transition-all snap-start">
+                <div className="w-16 h-16 rounded-full overflow-hidden mb-3 border-2 border-purple-50">
+                  <img src={s.icon} className="w-full h-full object-cover" />
                 </div>
-                <div className="text-[12px] md:text-[14px] font-black text-gray-900 truncate mb-0.5 md:mb-1">{seller.name}</div>
-                <div className="text-[9px] md:text-[11px] text-gray-500 mb-1.5 md:mb-2 font-medium">{seller.tagline}</div>
-                <div className="flex items-center justify-center gap-1 text-[9px] md:text-[11px] text-[#F57C00] font-bold mb-2 md:mb-3 bg-orange-50 w-fit mx-auto px-1.5 py-0.5 rounded-full">
-                  <Star size={8} fill="#F57C00"/> {seller.rating}
+                <div className="font-black text-[15px] leading-tight mb-1 truncate">{s.name}</div>
+                <div className="text-[11px] text-gray-500 font-medium mb-3">{s.tagline}</div>
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-1">
+                      <Star size={12} fill="#FFB300" stroke="none" />
+                      <span className="text-[12px] font-black">{s.rating}</span>
+                   </div>
+                   <div className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">Follow</div>
                 </div>
-                <div className="text-[9px] md:text-[11px] text-gray-400 font-medium mb-3 md:mb-4 flex flex-col gap-0.5">
-                  <span>{seller.products} items • {seller.followers} followers</span>
-                </div>
-                <button onClick={() => onToggleFollow(seller.id)}
-                  className={`w-full text-[10px] md:text-[12px] font-black py-1.5 md:py-2 rounded-lg md:rounded-xl transition-all shadow-sm ${(follows || []).includes(seller.id) ? 'bg-[#1565C0] text-white' : 'bg-[#EEF2FF] text-[#1565C0]'}`}>
-                  {(follows || []).includes(seller.id) ? '✓ Followed' : '+ Follow'}
-                </button>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* ══════════════════ SHOP REELS (REALISTIC) ══════════════════ */}
       <div className="bg-[#050B14] py-8 md:py-10 relative overflow-hidden">
@@ -806,38 +716,18 @@ export default function Home() {
             </div>
           </div>
           <div id="reels-scroller" className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x scroll-smooth">
-            {[
-              { img: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=400', label: 'Festive Haul',    creator: '@StyleByRiya',   views: '1.2M' },
-              { img: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=400', label: 'Secret Skincare', creator: '@GlowNisha',      views: '800K' },
-              { img: 'https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?auto=format&fit=crop&q=80&w=400', label: 'Audio Tech',      creator: '@TechArjun',      views: '2.1M' },
-              { img: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=400', label: 'Home Makeover',   creator: '@HomeNest',       views: '450K' },
-              { img: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=400', label: 'Sneaker Drop',    creator: '@SneakerHead',    views: '3.4M' },
-              { img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&q=80&w=400', label: 'Fitness Goals',   creator: '@FitIndia',       views: '920K' },
-            ].map((reel, i) => (
-              <div key={i} className="shrink-0 w-[130px] h-[220px] md:w-[170px] md:h-[280px] rounded-2xl md:rounded-[20px] overflow-hidden relative cursor-pointer group/reel snap-start shadow-xl border border-white/5 bg-gray-900">
-                <img src={reel.img} alt={reel.label} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 opacity-90 group-hover/reel:scale-105" />
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/40 shadow-xl transition-all duration-300">
-                     <span className="text-white text-base md:text-xl ml-0.5">▶</span>
-                  </div>
-                </div>
-                <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-white text-[8px] md:text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                   {reel.views}
-                </div>
-                <div className="absolute bottom-0 left-0 right-0 p-2.5 md:p-4 bg-gradient-to-t from-black via-black/80 to-transparent pt-12">
-                  <div className="text-white text-[11px] md:text-[14px] font-black leading-tight mb-0.5 truncate">{reel.label}</div>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <div className="w-4 h-4 rounded-full overflow-hidden bg-gray-600">
-                       <img src={reel.img} className="w-full h-full object-cover" />
+            {[].map((reel: any, i) => (
+                <div key={i} className="min-w-[140px] aspect-[9/16] rounded-3xl overflow-hidden relative group snap-start cursor-pointer border-2 border-transparent hover:border-[#7B1FA2] transition-all">
+                  <img src={reel.img} alt={reel.label} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent p-3 flex flex-col justify-end">
+                    <div className="text-[10px] font-black text-white leading-tight mb-0.5 line-clamp-2">{reel.label}</div>
+                    <div className="text-[8px] text-white/70 font-bold">{reel.creator}</div>
+                    <div className="flex items-center gap-1 text-[8px] text-white/60 mt-1">
+                      <PlayCircle size={8} /> {reel.views}
                     </div>
-                    <div className="text-white/80 text-[9px] font-bold truncate">{reel.creator}</div>
                   </div>
-                  <Link to="/products" className="block w-full bg-white/20 hover:bg-white text-white hover:text-black py-1 rounded-md text-[9px] md:text-[11px] font-black backdrop-blur-md transition-colors text-center">
-                    Shop Products
-                  </Link>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       </div>
@@ -869,7 +759,7 @@ export default function Home() {
       <div className="bg-white border-y border-gray-100 py-6 md:py-8">
         <div className="max-w-7xl mx-auto px-4">
           <h2 className="text-[15px] md:text-[17px] font-black text-center mb-5 md:mb-6">Why Millions Trust BYNDIO 💙</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mt-4">
             {[
               { icon: <Truck size={18}/>,       color: '#1565C0', bg: '#EEF2FF', title: 'Free Delivery',    desc: 'On orders above ₹299' },
               { icon: <RotateCcw size={18}/>,   color: '#1B5E20', bg: '#E8F5E9', title: 'Easy Returns',     desc: '7-day hassle-free' },

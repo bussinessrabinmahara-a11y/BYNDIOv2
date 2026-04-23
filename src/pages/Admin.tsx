@@ -260,7 +260,7 @@ function ProductManager() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('products').select('id,name,category,price,mrp,is_active,images,created_at,stock_quantity,seller_id').order('created_at', { ascending: false });
+    const { data } = await supabase.from('products').select('id,name,category,price,mrp,is_active,approval_status,images,created_at,stock_quantity,seller_id').order('created_at', { ascending: false });
     if (data) setProducts(data);
     setLoading(false);
   };
@@ -275,6 +275,20 @@ function ProductManager() {
       fetchGlobalProducts();
     } catch (err: any) {
       toast('Failed to update product: ' + err.message, 'error');
+    }
+  };
+
+  const toggleApproval = async (id: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'approved' ? 'pending' : 'approved';
+      const isActive = newStatus === 'approved'; // Make active automatically if approved
+      const { error } = await supabase.from('products').update({ approval_status: newStatus, is_active: isActive }).eq('id', id);
+      if (error) throw error;
+      setProducts(prev => prev.map(p => p.id === id ? { ...p, approval_status: newStatus, is_active: isActive } : p));
+      toastSuccess(newStatus === 'approved' ? 'Product approved and made live!' : 'Product moved to pending');
+      fetchGlobalProducts();
+    } catch (err: any) {
+      toast('Failed to update approval status: ' + err.message, 'error');
     }
   };
 
@@ -439,15 +453,16 @@ function ProductManager() {
               <th className="p-3 text-left">Price</th>
               <th className="p-3 text-left">Stock</th>
               <th className="p-3 text-left">Status</th>
+              <th className="p-3 text-left">Approval</th>
               <th className="p-3 text-left">Actions</th>
             </tr></thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="p-6 text-center text-gray-400">No products found</td></tr>
+                <tr><td colSpan={6} className="p-6 text-center text-gray-400">No products found</td></tr>
               ) : filtered.map(p => (
                 editingId === p.id ? (
                   <tr key={p.id} className="border-t border-gray-100 bg-[#E3F2FD]">
-                    <td className="p-3" colSpan={5}>
+                    <td className="p-3" colSpan={6}>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
                         {[
                           { label: 'Name', field: 'name' },
@@ -507,6 +522,12 @@ function ProductManager() {
                       <button onClick={() => toggleActive(p.id, p.is_active)}
                         className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-colors ${p.is_active ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700' : 'bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-700'}`}>
                         {p.is_active ? '● Live' : '○ Hidden'}
+                      </button>
+                    </td>
+                    <td className="p-3">
+                      <button onClick={() => toggleApproval(p.id, p.approval_status)}
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full transition-colors ${p.approval_status === 'approved' ? 'bg-green-100 text-green-700 hover:bg-yellow-100 hover:text-yellow-700' : 'bg-yellow-100 text-yellow-700 hover:bg-green-100 hover:text-green-700'}`}>
+                        {p.approval_status === 'approved' ? '✔ Approved' : '⏳ Pending'}
                       </button>
                     </td>
                     <td className="p-3">
@@ -2408,17 +2429,37 @@ function KYCReviewPanel() {
         .eq('kyc_status', sellerFilter)
         .order('id', { ascending: false });
 
+      // Fetch Applications with KYC
+      const { data: apps, error: appErr } = await supabase
+        .from('seller_applications')
+        .select('*')
+        .eq('status', filter)
+        .not('pan_number', 'is', null)
+        .order('created_at', { ascending: false });
+
       if (selErr) {
         console.error('Admin: Seller KYC Fetch Error:', selErr);
-        const { data: fallS, error: fallSErr } = await supabase
-          .from('sellers')
-          .select('*')
-          .eq('kyc_status', sellerFilter)
-          .order('id', { ascending: false });
-        if (fallSErr) throw fallSErr;
-        setSellers(fallS || []);
+        setSellers([]);
       } else {
-        setSellers(s || []);
+        // Merge apps into sellers for a unified view if they have KYC data
+        const mergedSellers = [...(s || [])];
+        if (apps) {
+          apps.forEach(a => {
+            if (!mergedSellers.find(ms => ms.id === a.user_id)) {
+              mergedSellers.push({
+                id: a.user_id,
+                business_name: a.business_name,
+                kyc_status: a.status === 'pending' ? 'submitted' : a.status,
+                pan_number: a.pan_number,
+                gst_number: a.gst_number,
+                business_address: a.pickup_address,
+                kyc_documents: a.kyc_documents,
+                users: { full_name: a.full_name, email: a.email }
+              });
+            }
+          });
+        }
+        setSellers(mergedSellers);
       }
     } catch (err: any) {
       toast('Sync Error: ' + err.message, 'error');
@@ -2440,22 +2481,40 @@ function KYCReviewPanel() {
   };
 
   const updateSellerStatus = async (id: string, status: 'approved' | 'rejected', userEmail: string, userName: string) => {
-    const { error } = await supabase.from('sellers').update({ 
-      kyc_status: status,
-      is_verified: status === 'approved' 
-    }).eq('id', id);
-    if (!error) {
-      if (status === 'approved') {
-        sendEmail(userEmail, 'kyc_approved', { name: userName });
-        await supabase.from('notifications').insert({ user_id: id, type: 'kyc', title: '🚀 Store Approved!', message: 'Your seller KYC is approved. You can now list products.', action_url: '/seller-dashboard' });
-      } else {
-        // Option to send rejection email with reason if needed
+    // 1. Try updating the sellers table (for existing sellers)
+    const { error: selErr, count } = await supabase.from('sellers')
+      .update({ kyc_status: status, is_verified: status === 'approved' })
+      .eq('id', id)
+      .select();
+
+    // 2. If no rows were affected, it might be a record from seller_applications
+    if (!selErr && (!count || count === 0)) {
+      const { error: appErr } = await supabase.from('seller_applications')
+        .update({ status })
+        .eq('user_id', id);
+      
+      if (appErr) {
+        toast(appErr.message, 'error');
+        return;
       }
-      fetchKYCs();
-      toastSuccess(`Seller ${status}`);
-    } else {
-      toast(error.message, 'error');
+    } else if (selErr) {
+      toast(selErr.message, 'error');
+      return;
     }
+
+    if (status === 'approved') {
+      sendEmail(userEmail, 'kyc_approved', { name: userName });
+      await supabase.from('notifications').insert({ 
+        user_id: id, 
+        type: 'kyc', 
+        title: '🚀 Store Approved!', 
+        message: 'Your seller KYC is approved. You can now list products.', 
+        action_url: '/seller-dashboard' 
+      });
+    }
+
+    fetchKYCs();
+    toastSuccess(`Seller ${status}`);
   };
   const testConnection = async () => {
     try {
@@ -2994,14 +3053,46 @@ function ApplicationsPanel() {
               business_name: app.business_name,
               category: app.category,
               pan_number: app.pan_number,
+              aadhaar_number: app.aadhaar_number,
               gst_number: app.gst_number,
-              business_state: app.business_state || app.state, // Map from application
+              business_state: app.business_state || app.state,
+              join_as: app.join_as,
+              pickup_address: app.pickup_address,
+              pickup_city: app.pickup_city,
+              pickup_state: app.pickup_state,
+              pickup_pincode: app.pickup_pincode,
+              shipping_preference: app.shipping_preference,
+              affiliate_enabled: app.affiliate_enabled,
               bank_account_number: app.bank_account,
               ifsc_code: app.ifsc_code,
               kyc_documents: app.kyc_documents || [],
               kyc_status: 'approved', 
               is_verified: true
             });
+
+            // Send Approval Email
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.access_token) {
+                await fetch('/api/send-email', {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                  },
+                  body: JSON.stringify({
+                    to: app.email,
+                    template: 'seller_approved',
+                    data: {
+                      name: app.full_name,
+                      businessName: app.business_name
+                    }
+                  })
+                });
+              }
+            } catch (emailErr) {
+              console.warn('Approval email failed:', emailErr);
+            }
           } else if (tab === 'influencer') {
             await supabase.from('influencers').upsert({
               id: userId,

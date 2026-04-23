@@ -222,7 +222,7 @@ export default function Checkout() {
     if (isCOD && !isOtpSent) {
       try {
         // C-01: Remove import.meta.env.DEV fallback, call Netlify function directly
-        const res = await fetch(`/.netlify/functions/send-otp`, {
+        const res = await fetch(`/api/send-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: address.mobile })
@@ -287,7 +287,7 @@ export default function Checkout() {
     try {
       // C-01: OTP verification via server — no dev bypass
       // COD OTP verification via server
-      const verifyRes = await fetch(`/.netlify/functions/verify-cod-otp`, {
+      const verifyRes = await fetch(`/api/verify-cod-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otp: otpValue, phone: address.mobile }),

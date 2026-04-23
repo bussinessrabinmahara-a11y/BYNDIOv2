@@ -39,7 +39,7 @@ export async function initiateSubscriptionPayment(
   const amount = plan.price; // Send in Rupees
   let orderId: string;
   try {
-    const API_URL = '/.netlify/functions/razorpay-order';
+    const API_URL = '/api/razorpay-order';
     const orderRes = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -54,7 +54,7 @@ export async function initiateSubscriptionPayment(
          throw new Error(errData.error || `Server error: ${orderRes.status}`);
        } catch {
          if (orderRes.status === 404 || text.includes('<!DOCTYPE html>')) {
-           console.warn('[Subscription] Netlify functions not reached. Using test order ID for local dev.');
+           console.warn('[Subscription] API functions not reached. Using test order ID for local dev.');
            orderId = `order_TEST_${Date.now()}`;
          } else {
            throw new Error(`Failed to create order: ${orderRes.status}`);
@@ -130,7 +130,7 @@ async function verifyAndSaveSubscription(
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('You must be logged in to activate a plan.');
 
-  const API_URL = '/.netlify/functions/verify-subscription';
+  const API_URL = '/api/verify-subscription';
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 
@@ -156,7 +156,7 @@ async function verifyAndSaveSubscription(
     // If Netlify functions are not running locally (404) AND we are using a demo payment ID,
     // mock a successful response so the frontend testing flow can complete.
     if (res.status === 404 && paymentId.startsWith('DEMO-')) {
-      console.warn('[Subscription] Netlify backend 404. Mocking successful verification for local dev.');
+      console.warn('[Subscription] API backend 404. Mocking successful verification for local dev.');
       const store = useAppStore.getState();
       if (store.user) {
         useAppStore.setState({

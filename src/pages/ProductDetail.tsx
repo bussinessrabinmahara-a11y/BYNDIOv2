@@ -199,8 +199,10 @@ export default function ProductDetail() {
   const discount = Math.round(((product.mrp - product.price) / product.mrp) * 100);
   const isOutOfStock = stockQty !== null && stockQty <= 0;
   
-  // Use only the product's actual images — no hardcoded unrelated images
-  const images = [product.icon];
+  // Use all product images if available
+  const images = (product.images && Array.isArray(product.images) && product.images.length > 0) 
+    ? product.images 
+    : [product.icon];
 
   const seller = {
     name: product.brand || 'Premium Vendor',
@@ -275,16 +277,32 @@ export default function ProductDetail() {
                     </button>
                  </div>
 
-                 {/* Desktop Thumbnails / Pagination */}
-                 <div className="flex items-center justify-center gap-2">
-                    {images.map((img, i) => (
-                      <button 
-                        key={i}
-                        onClick={() => scrollTo(i)}
-                        className={`transition-all duration-300 rounded-full ${selectedIndex === i ? 'w-8 h-1.5 bg-gray-900' : 'w-2 h-1.5 bg-gray-200 hover:bg-gray-300'}`}
-                      />
-                    ))}
-                 </div>
+                 {/* Desktop Thumbnails */}
+                 {images.length > 1 && (
+                   <div className="flex items-center justify-center gap-3 mt-2 overflow-x-auto pb-2">
+                      {images.map((img, i) => (
+                        <button 
+                          key={i}
+                          onClick={() => scrollTo(i)}
+                          className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-all shrink-0 ${selectedIndex === i ? 'border-[#0D47A1] scale-105 shadow-md' : 'border-gray-100 opacity-60 hover:opacity-100'}`}
+                        >
+                           <img src={getOptimizedImageUrl(img, 100, 100)} className="w-full h-full object-cover" alt={`thumbnail-${i}`} />
+                        </button>
+                      ))}
+                   </div>
+                 )}
+                 
+                 {/* Mobile Dots Pagination */}
+                 {images.length > 1 && (
+                   <div className="flex md:hidden items-center justify-center gap-1.5 mt-2">
+                      {images.map((_, i) => (
+                        <div 
+                          key={i}
+                          className={`h-1 rounded-full transition-all ${selectedIndex === i ? 'w-6 bg-[#0D47A1]' : 'w-1.5 bg-gray-200'}`}
+                        />
+                      ))}
+                   </div>
+                 )}
               </div>
 
               {/* RIGHT: COMPACT CONTENT AREA */}

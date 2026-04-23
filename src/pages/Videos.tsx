@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { usePageTitle } from '../lib/usePageTitle';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Sparkles } from 'lucide-react';
+import { Skeleton } from '../components/Skeleton';
 
 export default function Videos() {
   usePageTitle('Explore Reels | BYNDIO');
@@ -14,44 +15,7 @@ export default function Videos() {
   useEffect(() => {
     const fetchVideos = async () => {
       // Mock videos for now, in prod fetch from Supabase
-      const mockVideos: ShortVideo[] = [
-        {
-          id: 'v1',
-          creator_id: 'c1',
-          creator_name: 'FashionForward',
-          video_url: 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-showing-off-her-outfit-34444-large.mp4',
-          thumbnail_url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=400',
-          description: 'Obsessed with this new summer collection! 👗✨ #fashion #byndio #summer',
-          likes_count: 1240,
-          views_count: 5800,
-          created_at: new Date().toISOString(),
-          tagged_products: ['1', '2']
-        },
-        {
-          id: 'v2',
-          creator_id: 'c2',
-          creator_name: 'TechReviews',
-          video_url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-sunglasses-showing-off-a-necklace-34445-large.mp4',
-          thumbnail_url: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&q=80&w=400',
-          description: 'Accessorize like a pro! 💎 Custom jewelry from Byndio. #jewelry #style',
-          likes_count: 856,
-          views_count: 3200,
-          created_at: new Date().toISOString(),
-          tagged_products: ['3']
-        },
-        {
-          id: 'v3',
-          creator_id: 'c3',
-          creator_name: 'HomeDecor',
-          video_url: 'https://assets.mixkit.co/videos/preview/mixkit-top-shot-of-a-woman-cutting-vegetables-34446-large.mp4',
-          thumbnail_url: 'https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&q=80&w=400',
-          description: 'Easy kitchen upgrades for under ₹500! 🍳 #home #kitchen #hacks',
-          likes_count: 2100,
-          views_count: 12000,
-          created_at: new Date().toISOString(),
-          tagged_products: ['4', '5']
-        }
-      ];
+      const mockVideos: ShortVideo[] = [];
       
       try {
         const { data, error } = await supabase
@@ -65,10 +29,10 @@ export default function Videos() {
             creator_name: v.creator?.full_name || 'Creator'
           })));
         } else {
-          setVideos(mockVideos);
+          setVideos([]);
         }
       } catch (err) {
-        setVideos(mockVideos);
+        setVideos([]);
       } finally {
         setIsLoading(false);
       }
@@ -117,9 +81,16 @@ export default function Videos() {
       {/* Main Video Feed Container */}
       <div className="flex-1 relative bg-black md:p-10 flex items-center justify-center">
         {isLoading ? (
-          <div className="flex flex-col items-center gap-4 text-white">
-            <div className="w-12 h-12 border-4 border-[#7B1FA2] border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm font-bold opacity-50 tracking-widest uppercase">Loading BYNDIO Reels...</span>
+          <div className="w-full h-full max-w-[450px] aspect-[9/16] bg-gray-900 rounded-3xl overflow-hidden relative shadow-2xl">
+            <Skeleton variant="rect" className="w-full h-full opacity-20" />
+            <div className="absolute bottom-10 left-6 right-6 space-y-3">
+              <Skeleton variant="text" width="60%" className="opacity-30" />
+              <Skeleton variant="text" width="40%" className="opacity-30" />
+              <div className="flex gap-2">
+                <Skeleton variant="circle" width="30px" height="30px" className="opacity-30" />
+                <Skeleton variant="text" width="100px" className="opacity-30" />
+              </div>
+            </div>
           </div>
         ) : (
           <div className="w-full h-full max-w-[450px] shadow-2xl relative">

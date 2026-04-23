@@ -33,7 +33,7 @@ export default function RewardsWallet() {
     if (rewardPoints < 100) { toast('Minimum 100 points needed to redeem.', 'info'); return; }
     if (!user) return;
     try {
-      const response = await fetch('/.netlify/functions/redeem-points', {
+      const response = await fetch('/api/redeem-points', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

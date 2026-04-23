@@ -209,6 +209,61 @@ export default function Seller() {
     setFormData((prev: any) => ({ ...prev, [name]: value }));
   };
 
+  // ─── OTP LOGIC ───────────────────────────────────────────────
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+
+  const handleSendOTP = async () => {
+    if (!formData.phone || formData.phone.length !== 10) {
+      toast('Please enter a 10-digit mobile number', 'error');
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const res = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formData.phone })
+      });
+      if (!res.ok) throw new Error('Failed to send OTP');
+      setOtpSent(true);
+      toastSuccess('OTP sent successfully!');
+    } catch (err: any) {
+      toast(err.message || 'Failed to send OTP', 'error');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (otpValue.length !== 6) {
+      toast('Enter 6-digit OTP', 'error');
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const res = await fetch('/api/verify-cod-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: formData.phone, otp: otpValue })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.valid) throw new Error(data.error || 'Invalid OTP');
+      setOtpVerified(true);
+      setOtpSent(false);
+      toastSuccess('Mobile verified successfully!');
+    } catch (err: any) {
+      toast(err.message || 'Invalid OTP', 'error');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const validatePAN = (pan: string) => /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan?.toUpperCase());
+  const validateIFSC = (ifsc: string) => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc?.toUpperCase());
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -267,32 +322,65 @@ export default function Seller() {
 
     try {
       const { error } = await supabase.from('seller_applications').insert({
-        user_id:         user?.id || null,
-        full_name:       formData.fullName || '',
-        email:           formData.email || '',
-        phone:           formData.phone || '',
-        business_name:   formData.businessName || '',
-        category:        formData.category || 'Fashion & Clothing',
-        has_gst:         !!formData.gstNumber,
-        gst_number:      formData.gstNumber || '',
-        role:            formData.role || 'seller',
+        user_id:             user?.id || null,
+        full_name:           formData.fullName || '',
+        email:               formData.email || '',
+        phone:               formData.phone || '',
+        business_name:       formData.businessName || '',
+        category:            formData.category || 'Fashion & Clothing',
+        has_gst:             !!formData.gstNumber,
+        gst_number:          formData.gstNumber || '',
+        role:                'seller', // Applications are for seller role
+        join_as:             formData.join_as || 'Product Seller',
         
         // KYC Data
-        pan_number:      formData.panNumber || '',
-        aadhaar_number:  formData.aadhaarNumber || '',
-        bank_account:    formData.bankAccount || '',
-        ifsc_code:       formData.ifscCode || '',
-        kyc_documents:   formData.kycDocuments || [],
-        state:           formData.state || '',
-        business_state:  formData.state || '', // GST Compliance field
+        pan_number:          formData.panNumber || '',
+        aadhaar_number:      formData.aadhaarNumber || '',
+        bank_account:        formData.bankAccount || '',
+        ifsc_code:           formData.ifscCode || '',
+        kyc_documents:       formData.kycDocuments || [],
+        state:               formData.state || '',
+        business_state:      formData.state || '',
+        
+        // New Business/Logistics Data
+        pickup_address:      formData.pickup_address || '',
+        pickup_city:         formData.pickup_city || '',
+        pickup_state:        formData.pickup_state || '',
+        pickup_pincode:      formData.pickup_pincode || '',
+        shipping_preference: formData.shipping_preference || 'BYNDIO Shipping',
+        affiliate_enabled:   formData.affiliate_enabled !== false,
         
         status: 'pending',
       });
       if (error) throw error;
-      toastSuccess('✅ Registration submitted! Our team will contact you within 24 hours.');
+
+      // Send Confirmation Email
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`
+            },
+            body: JSON.stringify({
+              to: formData.email || user?.email,
+              template: 'seller_application_submitted',
+              data: {
+                name: formData.fullName || user?.user_metadata?.full_name || 'Seller',
+              }
+            })
+          });
+        }
+      } catch (emailErr) {
+        console.warn('Email notification failed:', emailErr);
+      }
+
+      toastSuccess('✅ Application submitted successfully!');
       setFormData({});
       localStorage.removeItem('byndio_seller_form');
-      setFormStep(1);
+      setFormStep(5); // Move to Success Screen
     } catch (err: any) {
       toast('❌ ' + err.message, 'error');
     } finally {
@@ -805,149 +893,452 @@ export default function Seller() {
         </div>
 
         {/* ══════════ REGISTRATION FORM ══════════ */}
-        <div id="seller-reg-form" className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          {/* Progress */}
-          <div className="flex items-center gap-2 mb-5">
-            {['Basic Info','Business','KYC','Agreement'].map((s, i) => (
-              <div key={i} className="flex items-center gap-2 flex-1">
-                <div className={`w-7 h-7 rounded-full text-[11px] font-black flex items-center justify-center shrink-0 ${formStep > i ? 'bg-[#1565C0] text-white' : formStep === i + 1 ? 'bg-[#1565C0] text-white' : 'bg-gray-200 text-gray-500'}`}>
-                  {formStep > i + 1 ? '✓' : i + 1}
+        <div id="seller-reg-form" className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-gray-100 scroll-mt-20">
+          {/* Progress Stepper */}
+          <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+            {['Basic Info', 'Business', 'KYC', 'Agreement', 'Success'].map((s, i) => (
+              <div key={i} className="flex items-center gap-2 flex-1 min-w-fit">
+                <div className={`w-8 h-8 rounded-full text-[12px] font-black flex items-center justify-center shrink-0 transition-all duration-500 ${
+                  formStep > i + 1 ? 'bg-green-500 text-white shadow-lg shadow-green-100' : 
+                  formStep === i + 1 ? 'bg-[#0D47A1] text-white shadow-lg shadow-blue-100' : 
+                  'bg-gray-100 text-gray-400'
+                }`}>
+                  {formStep > i + 1 ? <CheckCircle2 size={16} /> : i + 1}
                 </div>
-                <div className="flex-1">
-                  <div className={`text-[10px] font-black ${formStep === i + 1 ? 'text-[#1565C0]' : 'text-gray-400'}`}>{s}</div>
-                  {i < 3 && <div className={`h-0.5 mt-1 rounded-full transition-all ${formStep > i + 1 ? 'bg-[#1565C0]' : 'bg-gray-200'}`}/>}
+                <div className="flex-1 hidden md:block">
+                  <div className={`text-[10px] font-black uppercase tracking-widest ${formStep === i + 1 ? 'text-[#0D47A1]' : 'text-gray-400'}`}>{s}</div>
+                  <div className="h-1 mt-1 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full bg-[#0D47A1] transition-all duration-500 ${formStep > i ? 'w-full' : formStep === i + 1 ? 'w-1/2' : 'w-0'}`} />
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="mb-4 text-center md:text-left">
-            <h2 className="text-[14px] md:text-[18px] font-black text-[#0D47A1] leading-none mb-1 uppercase tracking-tight">🏪 Seller Onboarding</h2>
-            <p className="text-[9px] md:text-[11px] text-gray-400 font-bold uppercase tracking-widest leading-none">Verified • 100% Secure • 24h Approval</p>
+          <div className="mb-6 text-center md:text-left">
+            <h2 className="text-[18px] md:text-[24px] font-black text-[#0D47A1] leading-none mb-1 uppercase tracking-tight">🏪 {formStep === 5 ? 'Success!' : 'Seller Onboarding'}</h2>
+            <p className="text-[10px] md:text-[12px] text-gray-400 font-bold uppercase tracking-widest leading-none">
+              {formStep === 1 && 'Step 1: Your Basic Identity'}
+              {formStep === 2 && 'Step 2: Business & Logistics'}
+              {formStep === 3 && 'Step 3: Verification & Payments'}
+              {formStep === 4 && 'Step 4: Legal & Policies'}
+              {formStep === 5 && 'Step 5: Application Submitted'}
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-2">
-            {/* Step 1 */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* STEP 1: BASIC INFO */}
             {formStep === 1 && (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Full Name"><input type="text" name="fullName" value={formData.fullName || ''} onChange={handleInputChange} placeholder="Legal name" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
-                  <Field label="Mobile"><input type="tel" name="phone" value={formData.phone || ''} onChange={handleInputChange} placeholder="+91..." className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Email Address"><input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="you@example.com" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
-                  <Field label="Join As">
-                    <select name="role" value={formData.role || 'seller'} onChange={handleInputChange} className={`${inputCls} py-2 text-[11px] h-9`} required>
-                      <option value="seller">Product Seller</option>
-                      <option value="influencer">Influencer / Creator</option>
-                    </select>
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Full Name">
+                    <input type="text" name="fullName" value={formData.fullName || ''} onChange={handleInputChange} placeholder="As per PAN/Aadhaar" className={inputCls} required />
                   </Field>
-                </div>
-                  <Field label="Business State">
-                    <select name="state" value={formData.state || ''} onChange={handleInputChange} className={`${inputCls} py-2 text-[11px] h-9`} required>
-                      <option value="">Select State</option>
-                      {INDIAN_STATES.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </Field>
-                <button type="button" onClick={() => setFormStep(2)} className="w-full bg-[#0D47A1] hover:bg-[#1565C0] text-white py-2.5 rounded-xl text-[11px] font-black transition-all shadow-md uppercase tracking-widest mt-2">Next: Business →</button>
-                <button type="button" onClick={handleSaveForLater} className="w-full mt-1 text-gray-400 text-[9px] font-black uppercase tracking-widest hover:text-gray-600 flex items-center justify-center gap-1.5"><Clock size={10}/> Save Progress</button>
-              </div>
-            )}
-
-            {/* Step 2 */}
-            {formStep === 2 && (
-              <div className="space-y-2">
-                <div className="grid grid-cols-1 gap-2">
-                  <Field label="Store Name"><input type="text" name="businessName" value={formData.businessName || ''} onChange={handleInputChange} placeholder="Your brand name" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Category">
-                      <select name="category" value={formData.category || ''} onChange={handleInputChange} className={`${inputCls} py-2 text-[11px] h-9`} required>
-                        {['Fashion','Beauty','Home','Kitchen','Gadgets','Toys','Wellness'].map(c => <option key={c}>{c}</option>)}
-                      </select>
-                    </Field>
-                  </div>
-                  <Field label="GST Number (Optional)">
-                    <div className="space-y-1">
-                      <input type="text" name="gstNumber" value={formData.gstNumber || ''} onChange={handleInputChange} placeholder="Optional (Required for All-India Shipping)" className={`${inputCls} py-2 text-[11px] h-9`} />
-                      {!formData.gstNumber && <p className="text-[8px] text-orange-500 font-bold uppercase">⚠️ Missing GST restricts you to selling within {formData.state || 'your state'}.</p>}
+                  <Field label="Mobile Number">
+                    <div className="relative">
+                      <input 
+                        type="tel" 
+                        name="phone" 
+                        value={formData.phone || ''} 
+                        onChange={handleInputChange} 
+                        placeholder="10-digit mobile" 
+                        className={`${inputCls} ${otpVerified ? 'border-green-500 bg-green-50' : ''}`} 
+                        disabled={otpVerified}
+                        required 
+                      />
+                      {otpVerified ? (
+                        <div className="absolute right-2 top-1.5 bg-green-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest flex items-center gap-1">
+                          <CheckCircle2 size={10} /> Verified
+                        </div>
+                      ) : (
+                        <button 
+                          type="button" 
+                          onClick={handleSendOTP}
+                          disabled={otpLoading || !formData.phone || formData.phone.length !== 10}
+                          className="absolute right-2 top-1.5 bg-blue-50 text-[#0D47A1] text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest hover:bg-blue-100 transition-colors disabled:opacity-50">
+                          {otpLoading ? '...' : 'Verify OTP'}
+                        </button>
+                      )}
                     </div>
                   </Field>
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button type="button" onClick={() => setFormStep(1)} className="bg-gray-100 text-gray-600 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest">Back</button>
-                  <button type="button" onClick={() => setFormStep(3)} className="bg-[#0D47A1] text-white py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest">Next: KYC</button>
+
+                {otpSent && !otpVerified && (
+                  <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex flex-col gap-3 animate-in slide-in-from-top-2">
+                    <div className="text-[10px] font-black text-[#0D47A1] uppercase tracking-widest">Enter 6-Digit OTP</div>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        maxLength={6} 
+                        value={otpValue} 
+                        onChange={e => setOtpValue(e.target.value.replace(/\D/g, ''))}
+                        className="flex-1 p-3 bg-white border border-blue-200 rounded-xl text-center text-lg font-black tracking-widest outline-none focus:border-[#0D47A1]"
+                        placeholder="000000"
+                      />
+                      <button 
+                        type="button"
+                        onClick={handleVerifyOTP}
+                        disabled={otpLoading || otpValue.length !== 6}
+                        className="bg-[#0D47A1] text-white px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all">
+                        {otpLoading ? '...' : 'Verify'}
+                      </button>
+                    </div>
+                    <button type="button" onClick={() => setOtpSent(false)} className="text-[9px] font-bold text-gray-400 uppercase tracking-widest hover:text-gray-600 self-center">Cancel</button>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Email Address">
+                    <input type="email" name="email" value={formData.email || ''} onChange={handleInputChange} placeholder="business@example.com" className={inputCls} required />
+                  </Field>
+                  <Field label="Join As">
+                    <select name="join_as" value={formData.join_as || 'Product Seller'} onChange={handleInputChange} className={inputCls} required>
+                      <option value="Product Seller">Product Seller</option>
+                      <option value="Brand">Brand / Manufacturer</option>
+                    </select>
+                  </Field>
+                </div>
+                <Field label="Business State">
+                  <select name="state" value={formData.state || ''} onChange={handleInputChange} className={inputCls} required>
+                    <option value="">Select State</option>
+                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </Field>
+
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm shrink-0">👤</div>
+                  <div>
+                    <div className="text-[11px] font-black text-[#0D47A1] uppercase mb-1">Who Can Sell on BYNDIO?</div>
+                    <p className="text-[10px] text-gray-500 font-medium leading-relaxed">• Individuals & Home-based sellers<br />• Small businesses & Manufacturers<br />• Established Brands</p>
+                  </div>
+                </div>
+
+                <button type="button" 
+                  disabled={!formData.fullName || !formData.phone || !formData.email || !formData.state || !otpVerified}
+                  onClick={() => setFormStep(2)} 
+                  className="w-full bg-[#0D47A1] hover:bg-[#1565C0] disabled:bg-gray-200 disabled:text-gray-400 text-white py-4 rounded-2xl text-[13px] font-black transition-all shadow-xl shadow-blue-100 uppercase tracking-widest mt-4 flex items-center justify-center gap-2 group">
+                  Next: Business Details <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
+                </button>
+              </div>
+            )}
+
+            {/* STEP 2: BUSINESS DETAILS */}
+            {formStep === 2 && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Store Name">
+                    <input type="text" name="businessName" value={formData.businessName || ''} onChange={handleInputChange} placeholder="Display name for customers" className={inputCls} required />
+                  </Field>
+                  <Field label="Product Category">
+                    <select name="category" value={formData.category || ''} onChange={handleInputChange} className={inputCls} required>
+                      <option value="">Select Category</option>
+                      {['Fashion & Clothing', 'Beauty & Personal Care', 'Home & Kitchen', 'Electronics & Gadgets', 'Kids & Toys', 'Wellness & Fitness'].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </Field>
+                </div>
+
+                <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                  <label className="text-[11px] font-black text-gray-500 uppercase tracking-wider block mb-3">GST SELECTION (MANDATORY)</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button type="button" onClick={() => setFormData(p => ({...p, hasGst: true}))} 
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${formData.hasGst ? 'border-[#0D47A1] bg-blue-50/50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[12px] font-black text-gray-900">Yes – I have GST</span>
+                        {formData.hasGst && <CheckCircle2 size={16} className="text-[#0D47A1]"/>}
+                      </div>
+                      <p className="text-[9px] text-gray-400 font-medium">Sell across India with full scale</p>
+                    </button>
+                    <button type="button" onClick={() => setFormData(p => ({...p, hasGst: false, gstNumber: ''}))} 
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${formData.hasGst === false ? 'border-orange-400 bg-orange-50/30' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[12px] font-black text-gray-900">No – I don't have GST</span>
+                        {formData.hasGst === false && <AlertTriangle size={16} className="text-orange-500"/>}
+                      </div>
+                      <p className="text-[9px] text-gray-400 font-medium">Intra-state sales only (Below ₹40L)</p>
+                    </button>
+                  </div>
+
+                  {formData.hasGst && (
+                    <div className="mt-4 animate-in fade-in slide-in-from-top-2">
+                      <Field label="GST Number">
+                        <input type="text" name="gstNumber" value={formData.gstNumber || ''} onChange={handleInputChange} placeholder="22AAAAA0000A1Z5" className={`${inputCls} bg-white uppercase`} required />
+                      </Field>
+                    </div>
+                  )}
+
+                  {formData.hasGst === false && (
+                    <div className="mt-4 p-4 bg-orange-50 border border-orange-100 rounded-xl flex gap-3 animate-in fade-in slide-in-from-top-2">
+                      <AlertTriangle size={20} className="text-orange-500 shrink-0"/>
+                      <div>
+                        <div className="text-[11px] font-black text-orange-700 uppercase mb-1">⚠️ WITHOUT GST:</div>
+                        <p className="text-[10px] text-orange-600 font-medium leading-relaxed">
+                          • You can sell <strong>only within {formData.state || 'your state'}</strong><br />
+                          • Interstate orders will be automatically blocked<br />
+                          • GST is required to scale your business pan-India
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl p-5 border border-gray-100">
+                  <label className="text-[11px] font-black text-gray-500 uppercase tracking-wider block mb-3">PICKUP ADDRESS (MANDATORY)</label>
+                  <div className="grid grid-cols-1 gap-3">
+                    <input type="text" name="pickup_address" value={formData.pickup_address || ''} onChange={handleInputChange} placeholder="Address Line" className={inputCls} required />
+                    <div className="grid grid-cols-3 gap-3">
+                      <input type="text" name="pickup_city" value={formData.pickup_city || ''} onChange={handleInputChange} placeholder="City" className={inputCls} required />
+                      <input type="text" name="pickup_state" value={formData.pickup_state || ''} onChange={handleInputChange} placeholder="State" className={inputCls} required />
+                      <input type="text" name="pickup_pincode" value={formData.pickup_pincode || ''} onChange={handleInputChange} placeholder="Pincode" className={inputCls} required />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="SHIPPING PREFERENCE">
+                    <select name="shipping_preference" value={formData.shipping_preference || 'BYNDIO Shipping'} onChange={handleInputChange} className={inputCls} required>
+                      <option value="BYNDIO Shipping">BYNDIO Shipping (Recommended)</option>
+                      <option value="Self Shipping">Self Shipping (Manual)</option>
+                    </select>
+                    <p className="text-[9px] text-gray-400 font-medium mt-1">BYNDIO Shipping → Delivery + Returns handled automatically.</p>
+                  </Field>
+                  <Field label="AFFILIATE / INFLUENCER ENABLE">
+                    <select name="affiliate_enabled" value={formData.affiliate_enabled === false ? 'No' : 'Yes'} onChange={(e) => setFormData(p => ({...p, affiliate_enabled: e.target.value === 'Yes'}))} className={inputCls} required>
+                      <option value="Yes">Yes (Recommended)</option>
+                      <option value="No">No</option>
+                    </select>
+                    <p className="text-[9px] text-gray-400 font-medium mt-1">Get more sales without ads. Pay only when you earn.</p>
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-4">
+                  <button type="button" onClick={() => setFormStep(1)} className="bg-gray-100 text-gray-600 py-4 rounded-2xl text-[13px] font-black uppercase tracking-widest">Back</button>
+                  <button type="button" 
+                    disabled={!formData.businessName || !formData.category || (formData.hasGst === null) || !formData.pickup_address || !formData.pickup_pincode}
+                    onClick={() => setFormStep(3)} 
+                    className="bg-[#0D47A1] text-white py-4 rounded-2xl text-[13px] font-black uppercase tracking-widest shadow-xl shadow-blue-100 flex items-center justify-center gap-2 group">
+                    Next: KYC <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Step 3 */}
+            {/* STEP 3: KYC & BANK DETAILS */}
             {formStep === 3 && (
-              <div className="space-y-2">
-                <div className="bg-[#E3F2FD]/50 rounded-xl p-3 border border-[#0D47A1]/10 flex gap-2 text-[10px] text-[#0D47A1]">
-                    <ShieldCheck size={14} className="shrink-0 mt-0.5"/>
-                    <div className="leading-tight"><strong>KYC Required:</strong> Indian law requires verification for payout security. Data is 256-bit encrypted.</div>
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="bg-[#E3F2FD]/50 rounded-2xl p-5 border border-[#0D47A1]/10 flex gap-4 text-[#0D47A1]">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm shrink-0">🛡️</div>
+                  <div className="leading-tight">
+                    <div className="text-[11px] font-black uppercase mb-1">Security First</div>
+                    <p className="text-[10px] text-gray-600 font-medium">KYC is required for secure payouts and fraud prevention. Your data is encrypted and safe.</p>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="PAN Number"><input type="text" name="panNumber" value={formData.panNumber || ''} onChange={handleInputChange} placeholder="ABCDE..." className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
-                  <Field label="Aadhaar"><input type="text" name="aadhaarNumber" value={formData.aadhaarNumber || ''} onChange={handleInputChange} placeholder="0000..." className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="PAN Number">
+                    <input 
+                      type="text" 
+                      name="panNumber" 
+                      value={formData.panNumber || ''} 
+                      onChange={handleInputChange} 
+                      placeholder="ABCDE1234F" 
+                      className={`${inputCls} uppercase ${formData.panNumber && !validatePAN(formData.panNumber) ? 'border-red-500 bg-red-50' : ''}`} 
+                      required 
+                    />
+                    {formData.panNumber && !validatePAN(formData.panNumber) && <span className="text-[9px] text-red-500 font-bold uppercase ml-1">Invalid PAN format</span>}
+                  </Field>
+                  <Field label="Aadhaar Number">
+                    <input 
+                      type="text" 
+                      name="aadhaarNumber" 
+                      value={formData.aadhaarNumber || ''} 
+                      onChange={handleInputChange} 
+                      placeholder="12-digit Aadhaar" 
+                      className={`${inputCls} ${formData.aadhaarNumber && formData.aadhaarNumber.length !== 12 ? 'border-red-500 bg-red-50' : ''}`} 
+                      required 
+                    />
+                    {formData.aadhaarNumber && formData.aadhaarNumber.length !== 12 && <span className="text-[9px] text-red-500 font-bold uppercase ml-1">Must be 12 digits</span>}
+                  </Field>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
-                  <Field label="Bank Account"><input type="text" name="bankAccount" value={formData.bankAccount || ''} onChange={handleInputChange} placeholder="Account Number" className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
-                  <Field label="IFSC Code"><input type="text" name="ifscCode" value={formData.ifscCode || ''} onChange={handleInputChange} placeholder="SBIN..." className={`${inputCls} py-2 text-[11px] h-9`} required /></Field>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Bank Account Number">
+                    <input type="text" name="bankAccount" value={formData.bankAccount || ''} onChange={handleInputChange} placeholder="Your Account No." className={inputCls} required />
+                  </Field>
+                  <Field label="IFSC Code">
+                    <input 
+                      type="text" 
+                      name="ifscCode" 
+                      value={formData.ifscCode || ''} 
+                      onChange={handleInputChange} 
+                      placeholder="SBIN0001234" 
+                      className={`${inputCls} uppercase ${formData.ifscCode && !validateIFSC(formData.ifscCode) ? 'border-red-500 bg-red-50' : ''}`} 
+                      required 
+                    />
+                    {formData.ifscCode && !validateIFSC(formData.ifscCode) && <span className="text-[9px] text-red-500 font-bold uppercase ml-1">Invalid IFSC format</span>}
+                  </Field>
                 </div>
-                <div className="space-y-1 mt-1">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest pl-1">Upload Documents (PAN / GST)</label>
-                  <div className="flex flex-col gap-2">
-                    <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" id="seller-docs-upload" />
-                    <label htmlFor="seller-docs-upload" className="w-full border border-dashed border-gray-300 rounded-lg p-3 text-center cursor-pointer hover:bg-gray-50 flex items-center justify-center gap-2 transition-all">
-                      <Upload size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-500">Click to upload scans</span>
-                    </label>
-                    {formData.kycDocuments && formData.kycDocuments.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {formData.kycDocuments.map((url: string, idx: number) => (
-                          <div key={idx} className="relative w-12 h-12 bg-gray-100 rounded border border-gray-200 overflow-hidden group">
-                            {url.toLowerCase().endsWith('.pdf') ? <div className="text-[8px] font-black text-center mt-4">PDF</div> : <img src={url} className="w-full h-full object-cover" />}
-                            <button type="button" onClick={() => setFormData((prev: any) => ({ ...prev, kycDocuments: prev.kycDocuments.filter((_: any, i: number) => i !== idx) }))} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100"><X size={8}/></button>
-                          </div>
-                        ))}
+
+                <div className="space-y-3">
+                  <label className="text-[11px] font-black text-gray-500 uppercase tracking-widest block">Upload Verification Documents</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase ml-1">1. PAN Card *</span>
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" id="pan-upload" />
+                      <label htmlFor="pan-upload" className="border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center cursor-pointer hover:bg-gray-50 hover:border-[#0D47A1] transition-all flex flex-col items-center gap-2">
+                        <Upload size={20} className="text-gray-400"/>
+                        <span className="text-[10px] font-bold text-gray-500">Upload Front Side</span>
+                      </label>
+                    </div>
+                    {formData.hasGst && (
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase ml-1">2. GST Certificate *</span>
+                        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" id="gst-upload" />
+                        <label htmlFor="gst-upload" className="border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center cursor-pointer hover:bg-gray-50 hover:border-[#0D47A1] transition-all flex flex-col items-center gap-2">
+                          <Upload size={20} className="text-gray-400"/>
+                          <span className="text-[10px] font-bold text-gray-500">Upload Registration</span>
+                        </label>
                       </div>
                     )}
                   </div>
+                  
+                  {formData.kycDocuments && formData.kycDocuments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.kycDocuments.map((url: string, idx: number) => (
+                        <div key={idx} className="relative w-16 h-16 bg-gray-100 rounded-xl border border-gray-200 overflow-hidden group shadow-sm">
+                          {url.toLowerCase().endsWith('.pdf') ? <div className="text-[10px] font-black text-center mt-6">PDF</div> : <img src={url} className="w-full h-full object-cover" />}
+                          <button type="button" onClick={() => setFormData((prev: any) => ({ ...prev, kycDocuments: prev.kycDocuments.filter((_: any, i: number) => i !== idx) }))} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X size={10}/></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <button type="button" onClick={() => setFormStep(2)} className="bg-gray-100 text-gray-600 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest">Back</button>
-                  <button type="button" onClick={() => setFormStep(4)} className="bg-[#0D47A1] text-white py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest">Next: Sign</button>
+
+                <div className="grid grid-cols-2 gap-3 pt-4">
+                  <button type="button" onClick={() => setFormStep(2)} className="bg-gray-100 text-gray-600 py-4 rounded-2xl text-[13px] font-black uppercase tracking-widest">Back</button>
+                  <button type="button" 
+                    disabled={!formData.panNumber || !formData.aadhaarNumber || !formData.bankAccount || !formData.ifscCode || !validatePAN(formData.panNumber) || !validateIFSC(formData.ifscCode) || formData.aadhaarNumber.length !== 12}
+                    onClick={() => setFormStep(4)} 
+                    className="bg-[#0D47A1] text-white py-4 rounded-2xl text-[13px] font-black uppercase tracking-widest shadow-xl shadow-blue-100 flex items-center justify-center gap-2 group">
+                    Next: Agreement <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform"/>
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* Step 4 */}
+            {/* STEP 4: AGREEMENT & POLICIES */}
             {formStep === 4 && (
-              <div className="space-y-3">
-                <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-[9px] text-gray-500 leading-tight max-h-24 overflow-y-auto font-medium">
-                  <p className="font-black text-gray-800 mb-1 uppercase tracking-tight">📜 Seller Agreement Summary</p>
-                  You agree to: (1) Provide accurate info, (2) Fulfill orders fast, (3) Follow BYNDIO returns, (4) Comply with GST laws, (5) No fraud. We may suspend for violations. Full terms at byndio.in/legal.
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                  <h3 className="text-[12px] font-black text-gray-900 uppercase tracking-tight mb-4 flex items-center gap-2">
+                    <BookOpen size={16} className="text-[#0D47A1]"/> Seller Agreement Summary
+                  </h3>
+                  <div className="space-y-4">
+                    <p className="text-[11px] text-gray-600 font-medium leading-relaxed">By joining BYNDIO, you agree to the following terms:</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {[
+                        'Provide accurate business information',
+                        'Fulfill all customer orders on time',
+                        'Follow BYNDIO return & refund policies',
+                        'Comply with GST laws (if applicable)',
+                        'No fraud or fake listing activities'
+                      ].map((p, i) => (
+                        <div key={i} className="flex items-center gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                          <div className="w-5 h-5 rounded-full bg-blue-50 text-[#0D47A1] text-[10px] font-black flex items-center justify-center shrink-0">{i + 1}</div>
+                          <span className="text-[10px] text-gray-700 font-bold">{p}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-medium italic mt-4">We may suspend accounts for policy violations. Full terms available at byndio.in/legal.</p>
+                  </div>
                 </div>
 
-                <label className="flex items-start gap-2 cursor-pointer bg-blue-50/30 p-2 rounded-lg border border-blue-100/50">
-                  <input type="checkbox" checked={agreedTerms} onChange={e => setAgreedTerms(e.target.checked)} className="mt-0.5 accent-[#0D47A1] shrink-0 w-3.5 h-3.5"/>
-                  <span className="text-[10px] text-gray-700 leading-tight font-medium">
-                    I agree to the <Link to="/legal/terms" target="_blank" className="text-[#1565C0] font-black hover:underline">Seller Agreement</Link> and <Link to="/legal/terms" target="_blank" className="text-[#1565C0] font-black hover:underline">Terms of Use</Link>.
+                <label className="flex items-start gap-4 cursor-pointer bg-blue-50/50 p-5 rounded-2xl border border-blue-100 group transition-all hover:bg-blue-50">
+                  <input type="checkbox" checked={agreedTerms} onChange={e => setAgreedTerms(e.target.checked)} className="mt-1 accent-[#0D47A1] shrink-0 w-5 h-5"/>
+                  <span className="text-[12px] text-gray-700 leading-relaxed font-bold">
+                    I have read and agree to the <Link to="/legal/terms" target="_blank" className="text-[#1565C0] font-black hover:underline underline-offset-4">Seller Agreement</Link> and <Link to="/legal/terms" target="_blank" className="text-[#1565C0] font-black hover:underline underline-offset-4">Terms of Use</Link>.
                   </span>
                 </label>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setFormStep(3)} className="bg-gray-100 text-gray-600 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest">Back</button>
+                <div className="grid grid-cols-2 gap-3 pt-4">
+                  <button type="button" onClick={() => setFormStep(3)} className="bg-gray-100 text-gray-600 py-4 rounded-2xl text-[13px] font-black uppercase tracking-widest">Back</button>
                   <button type="submit" disabled={submitting || !agreedTerms}
-                    className="bg-[#0D47A1] text-white py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-900/10">
-                    {submitting ? <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"/> Processing...</> : '🚀 Submit Now'}
+                    className="bg-[#0D47A1] text-white py-4 rounded-2xl text-[13px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-blue-100 group">
+                    {submitting ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/> Submitting...</> : <>Submit Application <ArrowUpRight size={18} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"/></>}
                   </button>
                 </div>
+              </div>
+            )}
 
-                <p className="text-center text-[8px] text-gray-400 font-bold uppercase tracking-widest">🔒 Encrypted · Secure · No Spam</p>
+            {/* STEP 5: SUCCESS SCREEN */}
+            {formStep === 5 && (
+              <div className="space-y-6 animate-in zoom-in fade-in duration-700 text-center py-8">
+                <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-100 animate-bounce">
+                  <CheckCircle size={48} />
+                </div>
+                
+                <div>
+                  <h3 className="text-[24px] md:text-[32px] font-black text-gray-900 leading-none mb-2">🎉 You're Almost Ready!</h3>
+                  <p className="text-[12px] md:text-[14px] text-gray-500 font-medium">Your application is successfully submitted and under review.</p>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 rounded-3xl p-6 max-w-lg mx-auto text-left flex gap-4">
+                   <Clock size={24} className="text-[#0D47A1] shrink-0 mt-1"/>
+                   <div>
+                     <div className="text-[14px] font-black text-[#0D47A1] uppercase mb-1">⏳ Approval Time</div>
+                     <p className="text-[12px] text-blue-900 font-bold">Within 24 Hours</p>
+                     <p className="text-[11px] text-blue-800/60 font-medium mt-1">You will receive an SMS and Email confirmation once approved.</p>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                  <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm text-left">
+                    <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-4">What's Next?</div>
+                    <div className="space-y-3">
+                      {[
+                        'Upload your products',
+                        'Get product approval',
+                        'Start selling live',
+                        'Get orders via affiliates'
+                      ].map((step, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-lg bg-gray-50 text-gray-400 text-[10px] font-black flex items-center justify-center">{i + 1}</div>
+                          <span className="text-[12px] text-gray-700 font-bold">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-[#0D47A1] p-6 rounded-3xl text-white shadow-xl text-left relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-2xl" />
+                    <div className="text-[11px] font-black text-white/50 uppercase tracking-widest mb-4">Payment Info</div>
+                    <div className="space-y-3">
+                       <div className="flex items-center gap-3">
+                         <div className="text-xl">💰</div>
+                         <div>
+                           <div className="text-[13px] font-black leading-none">0% Commission</div>
+                           <div className="text-[9px] opacity-60 uppercase font-black">No hidden fees</div>
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-3">
+                         <div className="text-xl">🗓️</div>
+                         <div>
+                           <div className="text-[13px] font-black leading-none">5–7 Days Payout</div>
+                           <div className="text-[9px] opacity-60 uppercase font-black">After delivery</div>
+                         </div>
+                       </div>
+                       <div className="flex items-center gap-3">
+                         <div className="text-xl">🏦</div>
+                         <div>
+                           <div className="text-[13px] font-black leading-none">Direct Bank Transfer</div>
+                           <div className="text-[9px] opacity-60 uppercase font-black">Automatic settlements</div>
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button onClick={() => navigate('/')} className="px-10 py-4 bg-gray-900 text-white rounded-2xl text-[13px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">Go to Homepage</button>
+                </div>
               </div>
             )}
           </form>

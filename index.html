@@ -45,8 +45,7 @@
       form-action 'self' https://*.supabase.co;
     " />
 
-    <!-- Google Analytics 4 — REPLACE GA_MEASUREMENT_ID in Netlify env vars -->
-    <!-- Set VITE_GA_ID=G-XXXXXXXXXX in Netlify → Site Settings → Environment Variables -->
+    <!-- Google Analytics 4 — Set VITE_GA_ID in Vercel Environment Variables -->
     <script>
       (function() {
         var gaId = '__GA_ID__'; // Replaced at build time via vite.config.ts
@@ -63,8 +62,7 @@
       })();
     </script>
 
-    <!-- Microsoft Clarity — REPLACE CLARITY_ID in Netlify env vars -->
-    <!-- Set VITE_CLARITY_ID=XXXXXXXXXX in Netlify → Site Settings → Environment Variables -->
+    <!-- Microsoft Clarity — Set VITE_CLARITY_ID in Vercel Environment Variables -->
     <script>
       (function() {
         var clarityId = '__CLARITY_ID__'; // Replaced at build time via vite.config.ts

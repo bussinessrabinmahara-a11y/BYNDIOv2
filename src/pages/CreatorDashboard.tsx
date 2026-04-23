@@ -7,6 +7,7 @@ import { ShortVideo } from '../types';
 import { useAppStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { toast, toastSuccess } from '../components/Toast';
+import { Skeleton } from '../components/Skeleton';
 
 // Promo Code Generator Component
 function PromoCodeSection({ userId, affiliateLinks }: { userId?: string; affiliateLinks: any[] }) {
@@ -187,7 +188,7 @@ function PerformanceRanking({ totalClicks, totalConversions, totalEarnings, conv
   const myRank = leaderboard.find(r => r.id === userId)?.rank || '—';
   const myPercentile = leaderboard.length > 0 ? Math.round((1 - (Number(myRank) || leaderboard.length) / leaderboard.length) * 100) : 50;
 
-  const MOCK_LEADERBOARD = leaderboard.length > 0 ? leaderboard.map((r, i) => ({ ...r, isYou: r.id === userId, rank: i + 1 })) : [];
+  const MOCK_LEADERBOARD: any[] = [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -315,8 +316,25 @@ export default function CreatorDashboard() {
   ];
 
   if (isLoading) return (
-    <div className="min-h-[60vh] flex items-center justify-center">
-      <div className="w-10 h-10 border-4 border-[#7B1FA2] border-t-transparent rounded-full animate-spin" />
+    <div className="flex flex-col md:flex-row min-h-[calc(100vh-115px)] bg-[#F5F5F5]">
+      {/* Sidebar Skeleton */}
+      <div className="w-full md:w-[220px] bg-[#1A0A2E] p-4 space-y-6">
+        <div className="flex items-center gap-2">
+          <Skeleton variant="circle" width="32px" height="32px" className="opacity-20" />
+          <Skeleton variant="text" width="100px" className="opacity-20" />
+        </div>
+        <div className="space-y-4">
+          <Skeleton variant="text" count={6} className="opacity-10" />
+        </div>
+      </div>
+      {/* Main Content Skeleton */}
+      <div className="flex-1 p-6 space-y-6">
+        <Skeleton variant="text" width="200px" height="30px" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Skeleton variant="rect" count={4} height="80px" className="rounded-xl" />
+        </div>
+        <Skeleton variant="rect" height="300px" className="rounded-xl" />
+      </div>
     </div>
   );
 
@@ -762,32 +780,9 @@ export default function CreatorDashboard() {
           <>
             <div className="text-xl font-black text-[#7B1FA2] mb-4">🚀 Brand Campaigns</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { brand: 'GlowCare India', cat: 'Beauty', budget: '₹50,000', commission: '15%', deadline: '30 Mar 2026', slots: '10 creators needed', desc: 'Promote our new Vitamin C range. Create reels and stories.' },
-                { brand: 'TechWrist Co.', cat: 'Electronics', budget: '₹30,000', commission: '12%', deadline: '25 Mar 2026', slots: '5 creators needed', desc: 'Unboxing & review videos for our new Smart Watch Series 6.' },
-                { brand: 'FitIndia Nutrition', cat: 'Sports', budget: '₹40,000', commission: '10%', deadline: '28 Mar 2026', slots: '8 creators needed', desc: 'Promote our new Whey Protein line with workout integration videos.' },
-                { brand: 'EthnicWear Co.', cat: 'Fashion', budget: '₹60,000', commission: '13%', deadline: '31 Mar 2026', slots: '15 creators needed', desc: 'Showcase our Holi collection. Instagram + YouTube content.' },
-              ].map((c, i) => (
-                <div key={i} className="bg-white rounded-[10px] p-5 shadow-sm border border-gray-200">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="font-black text-[14px]">{c.brand}</div>
-                      <div className="text-[11px] text-[#7B1FA2] font-semibold">{c.cat}</div>
-                    </div>
-                    <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Open</span>
-                  </div>
-                  <p className="text-[12px] text-gray-500 mb-3 leading-relaxed">{c.desc}</p>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div className="bg-gray-50 rounded p-2 text-center"><div className="text-[12px] font-black">{c.commission}</div><div className="text-[10px] text-gray-400">Commission</div></div>
-                    <div className="bg-gray-50 rounded p-2 text-center"><div className="text-[12px] font-black">{c.budget}</div><div className="text-[10px] text-gray-400">Budget</div></div>
-                    <div className="bg-gray-50 rounded p-2 text-center"><div className="text-[11px] font-black">{c.deadline}</div><div className="text-[10px] text-gray-400">Deadline</div></div>
-                  </div>
-                  <div className="text-[11px] text-gray-500 mb-3">📌 {c.slots}</div>
-                  <button className="w-full bg-[#7B1FA2] hover:bg-[#6A1B9A] text-white py-2 rounded-md text-[12px] font-bold transition-colors">
-                    Apply for Campaign
-                  </button>
-                </div>
-              ))}
+              <div className="bg-white rounded-[10px] p-8 text-center text-gray-400 col-span-full shadow-sm">
+                No active brand campaigns at the moment. Check back soon!
+              </div>
             </div>
           </>
         )}
@@ -801,36 +796,6 @@ export default function CreatorDashboard() {
               </button>
             </div>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-              <div className="max-w-[400px] mx-auto w-full">
-                <VideoFeed videos={[
-                  {
-                    id: 'v1',
-                    creator_id: user?.id || '1',
-                    creator_name: user?.name || 'Creator',
-                    video_url: 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-showing-off-her-outfit-34444-large.mp4',
-                    thumbnail_url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=400',
-                    description: 'Obsessed with this new summer collection! 👗✨ #fashion #byndio #summer',
-                    likes_count: 1240,
-                    views_count: 5800,
-                    created_at: new Date().toISOString(),
-                    tagged_products: affiliateLinks.slice(0, 2).map(l => l.product_id)
-                  },
-                  {
-                    id: 'v2',
-                    creator_id: user?.id || '1',
-                    creator_name: user?.name || 'Creator',
-                    video_url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-sunglasses-showing-off-a-necklace-34445-large.mp4',
-                    thumbnail_url: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&q=80&w=400',
-                    description: 'Accessorize like a pro! 💎 Custom jewelry from Byndio. #jewelry #style',
-                    likes_count: 856,
-                    views_count: 3200,
-                    created_at: new Date().toISOString(),
-                    tagged_products: affiliateLinks.slice(2, 3).map(l => l.product_id)
-                  }
-                ]} />
-              </div>
-
               <div className="bg-white rounded-[20px] p-6 shadow-sm border border-purple-50">
                 <h3 className="text-[16px] font-black text-gray-800 mb-4">Video Insights</h3>
                 <div className="grid grid-cols-2 gap-4 mb-6">

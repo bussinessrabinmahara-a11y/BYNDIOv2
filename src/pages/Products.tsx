@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageWrapper from '../components/PageWrapper';
 import { CATEGORIES_DATA } from '../data/categories';
+import { Skeleton } from '../components/Skeleton';
 
 export default function Products() {
   usePageTitle('Browse Products');
@@ -119,7 +120,8 @@ export default function Products() {
       let q = supabase
         .from('products')
         .select('*', { count: 'exact' })
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('approval_status', 'approved');
 
       // H-04: Real Search against DB
       const searchTerm = (query || subParam).trim();
@@ -128,10 +130,10 @@ export default function Products() {
         if (words.length > 1) {
           // Multi-word: AND between words (each word must match at least one field)
           words.forEach(w => {
-            q = q.or(`name.ilike.%${w}%,brand.ilike.%${w}%,category.ilike.%${w}%,description.ilike.%${w}%`);
+            q = q.or(`name.ilike.%${w}%,category.ilike.%${w}%,description.ilike.%${w}%`);
           });
         } else {
-          q = q.or(`name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
+          q = q.or(`name.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
         }
       }
 
@@ -387,17 +389,7 @@ export default function Products() {
         <div className="flex-1 p-2 md:p-4">
           {isDBLoading ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-4">
-              {[...Array(10)].map((_, i) => (
-                <div key={i} className="bg-white rounded-[10px] overflow-hidden animate-pulse">
-                  <div className="h-[155px] bg-gray-200" />
-                  <div className="p-2.5 flex flex-col gap-2">
-                    <div className="h-3 bg-gray-200 rounded w-3/4" />
-                    <div className="h-3 bg-gray-200 rounded w-1/2" />
-                    <div className="h-4 bg-gray-200 rounded w-2/3" />
-                    <div className="h-8 bg-gray-200 rounded mt-2" />
-                  </div>
-                </div>
-              ))}
+              <Skeleton count={12} />
             </div>
           ) : realProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center gap-3">

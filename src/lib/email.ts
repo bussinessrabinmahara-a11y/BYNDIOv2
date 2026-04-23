@@ -5,7 +5,7 @@
 
 import { supabase } from './supabase';
 
-const API_BASE = '/.netlify/functions/';
+const API_BASE = '/api/';
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };

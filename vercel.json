@@ -1,0 +1,68 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(self)"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' https://*.supabase.co wss://*.supabase.co; script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com https://www.googletagmanager.com https://challenges.cloudflare.com https://www.clarity.ms https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.razorpay.com https://lumberjack.razorpay.com https://cdn.razorpay.com https://api.resend.com https://*.sentry.io https://o0.ingest.sentry.io https://cdnjs.cloudflare.com https://www.google-analytics.com https://www.googletagmanager.com https://challenges.cloudflare.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; frame-src https://checkout.razorpay.com https://api.razorpay.com https://challenges.cloudflare.com https://razorpay.com https://cdn.razorpay.com; font-src 'self' data:; worker-src 'self' blob:;"
+        }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/weekly-digest",
+      "schedule": "30 3 * * 1"
+    },
+    {
+      "path": "/api/seller-digest",
+      "schedule": "0 3 * * 1"
+    }
+  ]
+}

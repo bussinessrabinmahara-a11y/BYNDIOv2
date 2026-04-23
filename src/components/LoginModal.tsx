@@ -27,7 +27,10 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
   const [success, setSuccess] = useState<string | null>(null);
   const [otpSent, setOtpSent] = useState(false);
   const [pendingEmail, setPendingEmail] = useState('');
+  const [attempts, setAttempts] = useState(0);
+  const [lockoutTimer, setLockoutTimer] = useState(0);
   const [otpResendTimer, setOtpResendTimer] = useState(0);
+  const lockoutIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const otpIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initAuth = useAppStore(s => s.initAuth);
   const globalRefCode = useAppStore(s => s.referralCode);
@@ -42,11 +45,26 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
 
   useEffect(() => {
     return () => {
-      if (otpIntervalRef.current) {
-        clearInterval(otpIntervalRef.current);
-      }
+      if (otpIntervalRef.current) clearInterval(otpIntervalRef.current);
+      if (lockoutIntervalRef.current) clearInterval(lockoutIntervalRef.current);
     };
   }, []);
+
+  // Lockout Timer logic
+  useEffect(() => {
+    if (lockoutTimer > 0) {
+      if (lockoutIntervalRef.current) clearInterval(lockoutIntervalRef.current);
+      lockoutIntervalRef.current = setInterval(() => {
+        setLockoutTimer(prev => {
+          if (prev <= 1) {
+            clearInterval(lockoutIntervalRef.current!);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+  }, [lockoutTimer]);
 
   // Explicitly render Turnstile when modal opens or tab/mode changes
   useEffect(() => {
@@ -231,18 +249,49 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    const formElement = e.currentTarget as HTMLFormElement;
     setError(null); setSuccess(null);
+    const trimmedEmail = email.trim().toLowerCase();
     
     // Validate input lengths to prevent XSS/payload attacks
     if (!validateInputLengths()) { setLoading(false); return; }
 
-    const validationError = validateForm();
-    if (validationError) { setError(validationError); return; }
+    if (loginMethod === 'email') {
+      const emailErr = validators.email(trimmedEmail);
+      if (emailErr) { setError(emailErr); return; }
+      const passErr = validators.password(password);
+      if (passErr) { setError(passErr); return; }
+    } else {
+      if (!phone.trim() || phone.length < 10) { setError('Enter a valid 10-digit mobile number'); return; }
+    }
+    if (tab === 'register') {
+      const nameErr = validators.name(fullName);
+      if (nameErr) { setError(nameErr); return; }
+    }
+
+    // Check Lockout
+    if (lockoutTimer > 0) {
+      setError(`Too many failed attempts. Please wait ${lockoutTimer} seconds.`);
+      return;
+    }
+
     setLoading(true);
     
     try {
+      // Check server-side lockout status (if RPC exists)
+      try {
+        const { data: status } = await supabase.rpc('check_login_status', { p_email: trimmedEmail });
+        if (status?.locked) {
+          setLockoutTimer(status.remaining_seconds);
+          setAttempts(status.attempts);
+          throw new Error(`Account locked. Please wait ${status.remaining_seconds} seconds.`);
+        }
+      } catch (e) {
+        // Fallback to client-side if RPC fails (e.g. not created yet)
+        console.warn('Rate limit RPC check skipped or failed');
+      }
       // C-06: CAPTCHA check
-      const formData = new FormData(e.currentTarget as HTMLFormElement);
+      const formData = new FormData(formElement);
       const turnstileToken = formData.get('cf-turnstile-response');
       if (!turnstileToken) {
         setError('Please complete the CAPTCHA verification.');
@@ -261,7 +310,7 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
         captchaPassed = true;
       } else {
         try {
-          const tsRes = await fetch(`/.netlify/functions/verify-captcha`, {
+          const tsRes = await fetch(`/api/verify-captcha`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ response: turnstileToken })
@@ -291,7 +340,7 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
 
       if (tab === 'register') {
         const { data, error: signUpError } = await supabase.auth.signUp({ 
-          email: email.toLowerCase(), 
+          email: trimmedEmail, 
           password,
           options: {
             data: {
@@ -312,7 +361,7 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           
           // P0-SEC-03: Award referral points SERVER-SIDE (prevents self-awarding exploit)
           if (referralCode.trim() && data.session) {
-            fetch(`/.netlify/functions/award-referral-points`, {
+            fetch(`/api/award-referral-points`, {
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
@@ -344,20 +393,48 @@ export default function LoginModal({ isOpen, onClose }: { isOpen: boolean; onClo
           }
         } else { setSuccess('Please check your email to confirm your account.'); }
       } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) {
-          throw signInError;
-        }
-        
-        if (data.user && !data.user.email_confirmed_at) {
-          await supabase.auth.signOut();
-          throw new Error('Please verify your email address before logging in.');
-        }
-
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
+        // Reset on success
+        try { await supabase.rpc('reset_login_attempts', { p_email: trimmedEmail }); } catch(e) {}
+        setAttempts(0);
         initAuth(); onClose();
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred.');
+      const msg = err.message || 'An unexpected error occurred.';
+      setError(msg);
+
+      // Handle Supabase internal rate limits
+      if (msg.toLowerCase().includes('rate limit')) {
+        setLockoutTimer(60);
+        setError(`Security limit reached. Please wait 1 minute.`);
+        return;
+      }
+
+      // Record failure for rate limiting (custom logic)
+      if (tab === 'login' && (msg.toLowerCase().includes('invalid login credentials') || msg.toLowerCase().includes('invalid email'))) {
+        try {
+          const { data: result } = await supabase.rpc('record_login_attempt', { p_email: trimmedEmail });
+          if (result) {
+            setAttempts(result.attempts);
+            if (result.attempts >= 5) {
+              setLockoutTimer(60);
+              setError('Too many failed attempts. Account locked for 1 minute.');
+            } else if (result.attempts >= 3) {
+              setError(`${msg} (${5 - result.attempts} attempts remaining)`);
+            }
+          }
+        } catch (e) {
+          // Client-side fallback
+          const newAttempts = attempts + 1;
+          setAttempts(newAttempts);
+          if (newAttempts >= 5) {
+            setLockoutTimer(60);
+            setError('Too many failed attempts. Account locked for 1 minute.');
+          } else if (newAttempts >= 3) {
+            setError(`${msg} (${5 - newAttempts} attempts remaining)`);
+          }
+        }
+      }
     } finally { setLoading(false); }
   };
 

@@ -21,7 +21,7 @@ export default function B2B() {
     if (!buyerForm.buyer_phone) { toast('Please enter phone number', 'error'); return; }
     setOtpError(null);
     try {
-      const res = await fetch('/.netlify/functions/send-otp', {
+      const res = await fetch('/api/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: buyerForm.buyer_phone })
@@ -40,7 +40,7 @@ export default function B2B() {
     setIsVerifyingOtp(true);
     setOtpError(null);
     try {
-      const res = await fetch('/.netlify/functions/verify-cod-otp', {
+      const res = await fetch('/api/verify-cod-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: buyerForm.buyer_phone, otp: otpCode })

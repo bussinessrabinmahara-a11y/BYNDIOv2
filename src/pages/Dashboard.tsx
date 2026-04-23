@@ -145,7 +145,7 @@ export default function Dashboard() {
     category: 'Electronics',
     stock_quantity: '10',
     commission_pct: '10',
-    images: '📦',
+    images: [] as string[],
     promo_video_url: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -327,7 +327,7 @@ export default function Dashboard() {
     // C-11: Seller Updates Any Order — Secure handoff to Netlify function
     // The server-side function verifies the JWT and checks order_items.seller_id ownership.
     try {
-      const response = await fetch('/.netlify/functions/update-order-awb', {
+      const response = await fetch('/api/update-order-awb', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -412,7 +412,7 @@ export default function Dashboard() {
         category: newProduct.category,
         stock_quantity: stock,
         commission_pct: parseInt(newProduct.commission_pct) || 10,
-        images: [newProduct.images],
+        images: newProduct.images.length > 0 ? newProduct.images : ['📦'],
         promo_video_url: newProduct.promo_video_url?.trim() || null,
         is_active: false, // Default to inactive until approved
         approval_status: 'pending', // Requires admin review (H-09)
@@ -421,7 +421,7 @@ export default function Dashboard() {
       if (error) throw error;
 
       setShowAddProduct(false);
-      setNewProduct({ name: '', description: '', price: '', mrp: '', category: 'Electronics', stock_quantity: '10', commission_pct: '10', images: '📦', promo_video_url: '' });
+      setNewProduct({ name: '', description: '', price: '', mrp: '', category: 'Electronics', stock_quantity: '10', commission_pct: '10', images: [], promo_video_url: '' });
       fetchDashboardData();
     } catch (err: any) {
       toast(err.message || 'Failed to add product. Please try again.', 'error');
@@ -556,7 +556,7 @@ export default function Dashboard() {
         category: editingProduct.category,
         stock_quantity: stock,
         commission_pct: parseInt(editingProduct.commission_pct) || 10,
-        images: [editingProduct.images],
+        images: editingProduct.images.length > 0 ? editingProduct.images : ['📦'],
         promo_video_url: editingProduct.promo_video_url?.trim() || null,
       }).eq('id', editingProduct.id).eq('seller_id', user.id);
 
@@ -795,16 +795,17 @@ export default function Dashboard() {
                       if (!kycData.pan_number || !kycData.business_name || !kycData.business_address) { toast('Missing required data from step 1 or 3', 'error'); return; }
                       setIsSavingKyc(true);
                       try {
-                        const { error } = await supabase.from('sellers').update({
-                          business_name: kycData.business_name.trim(), 
-                          business_address: kycData.business_address.trim(),
-                          bank_account_number: bankDetails.account_number.trim(), 
-                          ifsc_code: bankDetails.ifsc.trim().toUpperCase(),
-                          gst_number: kycData.gst_number?.trim().toUpperCase() || null,
-                          pan_number: kycData.pan_number.trim().toUpperCase(),
-                          kyc_status: 'submitted',
-                          kyc_documents: kycData.kyc_documents
-                        }).eq('id', user!.id);
+      const { error } = await supabase.from('sellers').upsert({
+        id: user.id,
+        business_name: kycData.business_name.trim(), 
+        business_address: kycData.business_address.trim(),
+        bank_account_number: bankDetails.account_number.trim(), 
+        ifsc_code: bankDetails.ifsc.trim().toUpperCase(),
+        gst_number: kycData.gst_number?.trim().toUpperCase() || null,
+        pan_number: kycData.pan_number.trim().toUpperCase(),
+        kyc_status: 'submitted',
+        kyc_documents: kycData.kyc_documents
+      }, { onConflict: 'id' });
 
                         if (error) throw error;
                         setKycStatus('submitted');
@@ -1163,28 +1164,40 @@ export default function Dashboard() {
                     <p className="text-[10px] text-gray-500 font-medium">This budget is split between Creators (90%) and BYNDIO (10%). Higher commission attracts more promoters!</p>
                   </div>
                   <div className="flex flex-col gap-1.5 md:col-span-2">
-                    <label className="text-[11px] font-bold text-gray-500 uppercase">Product Image *</label>
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                      <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden shrink-0">
-                        {newProduct.images && (newProduct.images.startsWith('http') || newProduct.images.startsWith('https')) ? <img src={newProduct.images} className="w-full h-full object-cover" /> : newProduct.images}
-                      </div>
+                    <label className="text-[11px] font-bold text-gray-500 uppercase">Product Images *</label>
+                    <div className="flex flex-col gap-4">
+                      {newProduct.images.length > 0 && (
+                        <div className="flex gap-2 flex-wrap">
+                          {newProduct.images.map((img, idx) => (
+                            <div key={idx} className="relative w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden shrink-0 group">
+                              {(img.startsWith('http') || img.startsWith('https')) ? <img src={img} className="w-full h-full object-cover" /> : img}
+                              <button type="button" onClick={() => setNewProduct({...newProduct, images: newProduct.images.filter((_, i) => i !== idx)})} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex-1 w-full space-y-2">
                         <div className="flex flex-col gap-1">
-                          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 1: Upload File</span>
+                          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 1: Upload Files</span>
                           <input 
-                            type="file" accept="image/*" 
+                            type="file" accept="image/*" multiple
                             onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
+                              const files = e.target.files;
+                              if (!files || files.length === 0) return;
                               setImgUploading(true);
                               try {
-                                const compressed = await compressImage(file);
-                                const fileName = `${user?.id}/${Date.now()}-${file.name}`;
-                                const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
-                                if (error) throw error;
-                                const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
-                                setNewProduct({ ...newProduct, images: publicUrl });
-                                toastSuccess('Image uploaded and compressed!');
+                                const newUrls = [...newProduct.images];
+                                for (let i = 0; i < files.length; i++) {
+                                  const file = files[i];
+                                  const compressed = await compressImage(file);
+                                  const fileName = `${user?.id}/${Date.now()}-${file.name}`;
+                                  const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
+                                  if (error) throw error;
+                                  const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
+                                  newUrls.push(publicUrl);
+                                }
+                                setNewProduct({ ...newProduct, images: newUrls });
+                                toastSuccess('Images uploaded and compressed!');
                               } catch (err: any) {
                                 toast('Upload failed: ' + err.message, 'error');
                               } finally {
@@ -1196,13 +1209,21 @@ export default function Dashboard() {
                         </div>
                         <div className="flex flex-col gap-1">
                           <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 2: Image URL</span>
-                          <input 
-                            type="text" 
-                            placeholder="https://example.com/image.jpg"
-                            value={newProduct.images.startsWith('http') ? newProduct.images : ''} 
-                            onChange={e => setNewProduct({...newProduct, images: e.target.value})}
-                            className="w-full p-2 border border-gray-300 rounded-md text-[11px] outline-none focus:border-[#1565C0]"
-                          />
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              id="img-url-input"
+                              placeholder="https://example.com/image.jpg"
+                              className="w-full p-2 border border-gray-300 rounded-md text-[11px] outline-none focus:border-[#1565C0]"
+                            />
+                            <button type="button" onClick={() => {
+                              const input = document.getElementById('img-url-input') as HTMLInputElement;
+                              if (input && input.value) {
+                                setNewProduct({...newProduct, images: [...newProduct.images, input.value]});
+                                input.value = '';
+                              }
+                            }} className="bg-gray-100 px-3 rounded-md text-[11px] font-bold">Add</button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1268,7 +1289,7 @@ export default function Dashboard() {
                               <Eye size={12} /> View
                             </Link>
                             <button onClick={() => {
-                              setEditingProduct({ ...p, images: p.images?.[0] || '📦', price: String(p.price), mrp: String(p.mrp), stock_quantity: String(p.stock_quantity) });
+                              setEditingProduct({ ...p, images: p.images || [], price: String(p.price), mrp: String(p.mrp), stock_quantity: String(p.stock_quantity) });
                               setShowEditProduct(true);
                             }} className="text-[11px] text-[#1565C0] font-black hover:underline uppercase tracking-wider">Edit</button>
                             <button onClick={async () => {
@@ -1657,7 +1678,7 @@ export default function Dashboard() {
                           if (!sel) return;
                           try {
                             const session = await supabase.auth.getSession();
-                            const res = await fetch('/.netlify/functions/purchase-boost', {
+                            const res = await fetch('/api/purchase-boost', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.data.session?.access_token}` },
                               body: JSON.stringify({ productId: sel, boostPackageId: null, paymentId: 'DEMO-' + Date.now() })
@@ -1688,7 +1709,7 @@ export default function Dashboard() {
                   <button key={badge.type} onClick={async () => {
                     try {
                       const session = await supabase.auth.getSession();
-                      const res = await fetch('/.netlify/functions/purchase-badge', {
+                      const res = await fetch('/api/purchase-badge', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.data.session?.access_token}` },
                         body: JSON.stringify({ badgeType: badge.type, paymentId: 'DEMO-' + Date.now() })
@@ -1710,7 +1731,7 @@ export default function Dashboard() {
                   <button key={opt.dur} onClick={async () => {
                     try {
                       const session = await supabase.auth.getSession();
-                      const res = await fetch('/.netlify/functions/purchase-featured-store', {
+                      const res = await fetch('/api/purchase-featured-store', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.data.session?.access_token}` },
                         body: JSON.stringify({ duration: opt.dur, title: storeInfo.store_name, paymentId: 'DEMO-' + Date.now() })
@@ -1859,28 +1880,40 @@ export default function Dashboard() {
                 <input required type="number" value={editingProduct.stock_quantity} onChange={e => setEditingProduct({ ...editingProduct, stock_quantity: e.target.value })} className="p-2 border border-gray-300 rounded-md text-sm outline-none focus:border-[#1565C0]" />
               </div>
               <div className="flex flex-col gap-1.5 md:col-span-2">
-                <label className="text-[11px] font-bold text-gray-500 uppercase">Product Image *</label>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden shrink-0">
-                    {editingProduct.images && (editingProduct.images.startsWith('http') || editingProduct.images.startsWith('https')) ? <img src={editingProduct.images} className="w-full h-full object-cover" /> : editingProduct.images}
-                  </div>
+                <label className="text-[11px] font-bold text-gray-500 uppercase">Product Images *</label>
+                <div className="flex flex-col gap-4">
+                  {editingProduct.images?.length > 0 && (
+                    <div className="flex gap-2 flex-wrap">
+                      {editingProduct.images.map((img: string, idx: number) => (
+                        <div key={idx} className="relative w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-3xl border border-gray-200 overflow-hidden shrink-0 group">
+                          {(img.startsWith('http') || img.startsWith('https')) ? <img src={img} className="w-full h-full object-cover" /> : img}
+                          <button type="button" onClick={() => setEditingProduct({...editingProduct, images: editingProduct.images.filter((_: any, i: number) => i !== idx)})} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex-1 w-full space-y-2">
                     <div className="flex flex-col gap-1">
-                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 1: Upload File</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 1: Upload Files</span>
                       <input 
-                        type="file" accept="image/*" 
+                        type="file" accept="image/*" multiple
                         onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
+                          const files = e.target.files;
+                          if (!files || files.length === 0) return;
                           setImgUploading(true);
                           try {
-                            const compressed = await compressImage(file);
-                            const fileName = `${user?.id}/${Date.now()}-${file.name}`;
-                            const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
-                            if (error) throw error;
-                            const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
-                            setEditingProduct({ ...editingProduct, images: publicUrl });
-                            toastSuccess('Image updated and compressed!');
+                            const newUrls = [...(editingProduct.images || [])];
+                            for (let i = 0; i < files.length; i++) {
+                              const file = files[i];
+                              const compressed = await compressImage(file);
+                              const fileName = `${user?.id}/${Date.now()}-${file.name}`;
+                              const { data, error } = await supabase.storage.from('products').upload(fileName, compressed);
+                              if (error) throw error;
+                              const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl(fileName);
+                              newUrls.push(publicUrl);
+                            }
+                            setEditingProduct({ ...editingProduct, images: newUrls });
+                            toastSuccess('Images updated and compressed!');
                           } catch (err: any) {
                             toast('Upload failed: ' + err.message, 'error');
                           } finally {
@@ -1892,13 +1925,21 @@ export default function Dashboard() {
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Option 2: Image URL</span>
-                      <input 
-                        type="text" 
-                        placeholder="https://example.com/image.jpg"
-                        value={editingProduct.images.startsWith('http') ? editingProduct.images : ''} 
-                        onChange={e => setEditingProduct({...editingProduct, images: e.target.value})}
-                        className="w-full p-2 border border-gray-300 rounded-md text-[11px] outline-none focus:border-[#1565C0]"
-                      />
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          id="edit-img-url-input"
+                          placeholder="https://example.com/image.jpg"
+                          className="w-full p-2 border border-gray-300 rounded-md text-[11px] outline-none focus:border-[#1565C0]"
+                        />
+                        <button type="button" onClick={() => {
+                          const input = document.getElementById('edit-img-url-input') as HTMLInputElement;
+                          if (input && input.value) {
+                            setEditingProduct({...editingProduct, images: [...(editingProduct.images || []), input.value]});
+                            input.value = '';
+                          }
+                        }} className="bg-gray-100 px-3 rounded-md text-[11px] font-bold">Add</button>
+                      </div>
                     </div>
                   </div>
                 </div>
