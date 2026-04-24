@@ -39,7 +39,7 @@ function esc(str) {
 function getHeaders(event) {
   const origin = event?.headers?.['origin'] || event?.headers?.['Origin'] || '';
   const allowed = ['https://byndio.in', 'https://www.byndio.in'];
-  const allowedOrigin = allowed.includes(origin) ? origin : (process.env.NODE_ENV !== 'production' ? (origin || '*') : 'https://byndio.in');
+  const allowedOrigin = allowed.includes(origin) ? origin : (origin && origin.endsWith('.vercel.app')) ? origin : (process.env.NODE_ENV !== 'production' ? (origin || '*') : 'https://byndio.in');
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',

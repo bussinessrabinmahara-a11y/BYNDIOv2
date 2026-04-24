@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const SR_EMAIL    = process.env.SHIPROCKET_EMAIL;
 const SR_PASSWORD = process.env.SHIPROCKET_PASSWORD;
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 let   SR_TOKEN    = null;
 let   SR_TOKEN_EXP = 0;
@@ -192,8 +192,11 @@ export default async function handler(req, res) {
   try {
     const result = await (async (event) => {
       
+  const origin = event.headers['origin'] || event.headers['Origin'] || '';
+  const allowedOrigins = ['https://byndio.in', 'https://www.byndio.in'];
+  const corsOrigin = allowedOrigins.includes(origin) ? origin : (origin && origin.endsWith('.vercel.app')) ? origin : (process.env.NODE_ENV !== 'production' ? (origin || '*') : 'https://byndio.in');
   const hdrs = {
-    'Access-Control-Allow-Origin': process.env.URL || 'https://byndio.in',
+    'Access-Control-Allow-Origin': corsOrigin,
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',

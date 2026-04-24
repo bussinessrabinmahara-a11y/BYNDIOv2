@@ -10,7 +10,8 @@ const ALLOWED_ORIGINS = ['https://byndio.in', 'https://www.byndio.in'];
 function getAllowedOrigin(event) {
   const origin = event.headers['origin'] || event.headers['Origin'] || '';
   if (ALLOWED_ORIGINS.includes(origin)) return origin;
-  // Allow dev/preview origins
+  // Allow Vercel preview/dev deployments
+  if (origin && origin.endsWith('.vercel.app')) return origin;
   if (process.env.NODE_ENV !== 'production') return origin || '*';
   return 'https://byndio.in';
 }

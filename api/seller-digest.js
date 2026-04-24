@@ -1,40 +1,27 @@
 // ================================================================
-// WEEKLY SELLER DIGEST EMAIL
-// Netlify Scheduled Function — runs every Monday 9am IST
-// Schedule: netlify.toml → [functions."seller-digest"] schedule = "0 3 * * 1"
-// (3am UTC = 8:30am IST)
+// WEEKLY SELLER DIGEST EMAIL — Vercel Cron Function
+// Runs every Monday 8:30am IST (3:00 UTC)
+// Setup: vercel.json → crons: [{ path: "/api/seller-digest", schedule: "0 3 * * 1" }]
 // Sends each seller their weekly performance summary
 // ================================================================
 
-
 export default async function handler(req, res) {
-  const event = {
-    body: req.body ? (typeof req.body === 'string' ? req.body : JSON.stringify(req.body)) : '',
-    httpMethod: req.method,
-    headers: req.headers,
-    queryStringParameters: req.query,
-    path: req.url,
-  };
-
-  try {
-    const result = await (async (event) => {
-      
-  // Guard: Only allow Netlify scheduled function invocations
-  const isScheduled = event.headers['x-netlify-schedule'] === 'true'
-    || (event.httpMethod === 'POST' && event.headers['user-agent']?.includes('Netlify'));
+  // Guard: Only allow Vercel cron invocations or dev testing
+  const isVercelCron = req.headers['authorization'] === `Bearer ${process.env.CRON_SECRET}`;
   const isDev = process.env.NODE_ENV !== 'production';
-  if (!isScheduled && !isDev) {
-    return { statusCode: 403, body: 'Forbidden — scheduled function' };
+  if (!isVercelCron && !isDev) {
+    return res.status(403).json({ error: 'Forbidden — cron only' });
   }
 
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
   const FROM_EMAIL     = process.env.FROM_EMAIL || 'noreply@byndio.in';
   const SUPABASE_URL   = process.env.SUPABASE_URL;
   const SUPABASE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const BASE_URL       = process.env.VITE_APP_URL || 'https://byndio.in';
 
   if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_KEY) {
     console.warn('[seller-digest] Missing env vars — skipping');
-    return { statusCode: 200, body: 'Skipped — missing config' };
+    return res.status(200).json({ message: 'Skipped — missing config' });
   }
 
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -45,7 +32,7 @@ export default async function handler(req, res) {
     const sellers = await sellersRes.json();
     if (!Array.isArray(sellers) || sellers.length === 0) {
       console.info('[seller-digest] No sellers found');
-      return { statusCode: 200, body: 'No sellers' };
+      return res.status(200).json({ message: 'No sellers' });
     }
 
     let sent = 0;
@@ -60,7 +47,6 @@ export default async function handler(req, res) {
 
         if (validItems.length === 0) continue;
 
-        // FIX: Correctly count unique orders
         const totalOrders  = new Set(validItems.map(i => i.orders?.id).filter(Boolean)).size;
         const totalRevenue = validItems.reduce((s, i) => s + (i.price * i.quantity), 0);
         const delivered    = validItems.filter(i => i.orders?.status === 'delivered').length;
@@ -94,7 +80,7 @@ body{font-family:Arial,sans-serif;color:#212121;margin:0;background:#f5f5f5}
       <div class="stat"><div style="font-size:28px;font-weight:900;color:#2E7D32">${delivered}</div><div style="font-size:12px;color:#555">Delivered</div></div>
     </div>
     ${totalOrders === 0 ? '<div style="background:#FFF8E1;border-radius:8px;padding:14px;font-size:13px;color:#795548">💡 Tip: Add more products and complete your KYC to increase visibility.</div>' : '<div style="background:#E8F5E9;border-radius:8px;padding:14px;font-size:13px;color:#2E7D32">✅ Great week! Keep it up. Make sure to ship pending orders within 24 hours.</div>'}
-    <center style="margin:24px 0"><a href="https://byndio.in/seller-dashboard" class="btn">View Dashboard →</a></center>
+    <center style="margin:24px 0"><a href="${BASE_URL}/seller-dashboard" class="btn">View Dashboard →</a></center>
     <p style="font-size:12px;color:#757575">Questions? seller-support@byndio.in</p>
   </div>
   <div class="footer">© ${new Date().getFullYear()} BYNDIO Technologies Pvt Ltd · <a href="#" style="color:#9e9e9e">Unsubscribe</a></div>
@@ -113,22 +99,9 @@ body{font-family:Arial,sans-serif;color:#212121;margin:0;background:#f5f5f5}
     }
 
     console.info(`[seller-digest] Sent ${sent}/${sellers.length} digests`);
-    return { statusCode: 200, body: `Sent ${sent} digests` };
+    return res.status(200).json({ sent, total: sellers.length });
   } catch (err) {
     console.error('[seller-digest] Error:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: 'Internal error' }) };
-  }
-
-    })(event);
-
-    res.status(result.statusCode || 200);
-    if (result.headers) {
-      Object.entries(result.headers).forEach(([key, value]) => res.setHeader(key, value));
-    }
-    res.send(result.body);
-  } catch (error) {
-    console.error('Error in function:', error);
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: 'Internal error' });
   }
 }
-;

@@ -44,4 +44,5 @@ original_logo.png
 .vercel/
 .agent/
 .temp/
+scratch/
 *.log
